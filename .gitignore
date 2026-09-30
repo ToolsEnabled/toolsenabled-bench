@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.benchmark-data/
+*.log
+.DS_Store
+
+.release-work/
+release/

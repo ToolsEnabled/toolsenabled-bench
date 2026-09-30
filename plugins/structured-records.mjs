@@ -1,0 +1,99 @@
+import { registerBenchmark } from "../src/benchmark/registry.mjs";
+import {
+  genericStarter,
+  newExperimentDraft,
+} from "../src/benchmark/starters.mjs";
+
+export function recordStudy() {
+  const spec = newExperimentDraft(genericStarter(), {
+    purpose: "recorded-diagnostic",
+    initializePopulation: true,
+  });
+  spec.id = "structured-records";
+  spec.name = "Structured records · worked example";
+  spec.domain = "structured-records";
+  spec.catalog = [
+    {
+      id: "record",
+      version: "1",
+      kind: "atom",
+      role: "node",
+      text: 'Read this record: {{record}}. Return the value of {{key}} as JSON with one key, "value".',
+      parameters: { record: '{"count":7,"label":"amber"}', key: "count" },
+      semantics: {
+        kind: "record-lookup",
+        record: "{{record}}",
+        key: "{{key}}",
+      },
+    },
+    {
+      id: "format",
+      version: "1",
+      kind: "template",
+      role: "node",
+      text: "Use only the information in the record.\n{{slot:task}}",
+      parameters: {},
+      slots: { task: "node" },
+      semantics: { kind: "prompt" },
+    },
+  ];
+  spec.tasks = [
+    {
+      id: "count",
+      familyId: "numeric-field",
+      root: { use: "format", slots: { task: { use: "record" } } },
+      input: null,
+      expected: { value: 7 },
+      split: "development",
+    },
+    {
+      id: "label",
+      familyId: "text-field",
+      root: {
+        use: "format",
+        slots: { task: { use: "record", params: { key: "label" } } },
+      },
+      input: null,
+      expected: { value: "amber" },
+      split: "held-out",
+    },
+  ];
+  spec.conditions = [
+    {
+      id: "reference",
+      label: "Recorded reference",
+      model: { provider: "fixture", id: "reference", settings: {} },
+      adapter: {
+        kind: "replay",
+        responses: { count: '{"value":7}', label: '{"value":"amber"}' },
+      },
+    },
+    {
+      id: "wrong-field",
+      label: "Recorded wrong field",
+      model: { provider: "fixture", id: "wrong-field", settings: {} },
+      adapter: {
+        kind: "replay",
+        responses: { count: '{"value":"amber"}', label: '{"value":7}' },
+      },
+    },
+  ];
+  spec.protocol.grading = { kind: "json" };
+  spec.decisions =
+    "Worked example with authored reference and wrong-field responses. Demonstrates nested prompts, exact JSON grading, distinct task families and portable plugin packaging. No live model was measured. Two tasks do not establish performance on a broader population.";
+  return spec;
+}
+registerBenchmark({
+  id: "structured-records",
+  label: "Structured records",
+  domains: ["structured-records"],
+  matches: (spec) => spec.domain === "structured-records",
+  gradingKinds: [],
+  starters: [
+    {
+      id: "structured-records",
+      label: "Structured records: JSON extraction",
+      create: recordStudy,
+    },
+  ],
+});

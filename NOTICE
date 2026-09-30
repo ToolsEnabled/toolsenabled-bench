@@ -1,0 +1,39 @@
+ToolsEnabled BenchMark Builder 0.2.0
+Copyright (c) 2026 Joshua Pinckard
+
+ToolsEnabled BenchMark Builder is a standalone benchmark-authoring and evidence
+workbench, separate from ToolsEnabled Fleet. This source distribution is
+derived from the benchmark subsystem identified in EXTRACTION.json.
+
+LICENSE contains the MIT permission notice and warranty disclaimer. Preserve
+that file with copies of the software. Third-party attribution and retained
+license texts are recorded in THIRD-PARTY-LICENSES.md. Package-specific terms
+remain associated with their respective materials.
+
+Joshua Pinckard conceived the project, defined its objectives and requirements,
+directed the autonomous agent workflows, selected and evaluated outputs, and
+assumes responsibility for the research methodology and conclusions. AI agents
+generated substantial portions of the implementation and written drafts.
+
+The source manifest distinguishes repository software, generated artifacts,
+authored controls, compatibility fixtures, reference material and license texts. The repository's MIT
+declaration does not replace the per-file provenance or any separately recorded
+third-party terms. Unknown provenance or licensing is identified explicitly.
+
+The mulberry32 implementation is attributed in src/benchmark/provenance.mjs
+to Tommy Ettinger's published algorithm. That record reports a CC0 1.0 source
+reference and a publicly circulating JavaScript form, while stating that the
+exact origin of the JavaScript lines cannot be established from this tree.
+Preserve that qualification; no claim of original authorship is made for those
+lines by this notice.
+
+Public runnable examples and retained-response regression fixtures use authored
+recorded controls, including the original 0.1.0 arithmetic compatibility export.
+Authoring libraries retain source attribution for prompt snippets and reference
+code. Historical live CLI/model run outputs and derived performance figures are
+excluded from this public distribution. Software checks and retained apparatus
+records do not establish a model-performance result, independent scientific
+validation or publication.
+
+This notice documents product attribution and source scope. It does not add
+copyright, trademark or contribution permissions to the retained licenses.

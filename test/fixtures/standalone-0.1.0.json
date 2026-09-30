@@ -1,0 +1,13 @@
+{
+  "format": "benchmark-compatibility-fixture",
+  "version": 1,
+  "sourceCommit": "4b08486",
+  "generator": {
+    "name": "ToolsEnabled BenchMark Builder",
+    "version": "0.1.0"
+  },
+  "projectSha256": "42ed4d3c7bb293537dee2603a17c53c7adad8583bd694c5ac0895acd34c5f13a",
+  "archiveSha256": "905bf59ca1e4149375d43b4ccd18ae365ce97f13156c0bfa49d51c0d6cee7c31",
+  "files": 122,
+  "recordedControls": true
+}

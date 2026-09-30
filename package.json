@@ -1,0 +1,26 @@
+{
+  "name": "@toolsenabled/benchmark-builder",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A standalone workbench for composing, freezing, running and reporting reproducible benchmark studies.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "start": "node tools/build.mjs && node server/main.mjs",
+    "serve": "node server/main.mjs",
+    "test": "node --test tools/test/*.test.mjs test/*.test.mjs",
+    "check:core": "node tools/check-benchmark-core-independent.mjs",
+    "test:browser": "node tools/browser-review.mjs",
+    "test:standalone": "node --test test/*.test.mjs",
+    "release": "npm run build && node tools/release.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "playwright": "1.63.0",
+    "prettier": "3.5.3"
+  }
+}

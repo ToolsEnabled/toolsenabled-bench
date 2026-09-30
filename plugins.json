@@ -1,0 +1,44 @@
+{
+  "extensions": [
+    "./plugins/structured-records.mjs"
+  ],
+  "runtime": [
+    {
+      "module": "lean-plugin.mjs",
+      "export": "leanBenchmark",
+      "files": [
+        "execution-lean.mjs",
+        "execution.mjs",
+        "execution_lean.py",
+        "execution_reference.py",
+        "lean-audit.mjs",
+        "lean-authoring.mjs",
+        "lean-cases.mjs",
+        "lean-codegen.mjs",
+        "lean-data.py",
+        "lean-export.mjs",
+        "lean-grade.mjs",
+        "lean-observations.mjs",
+        "lean-plugin.mjs",
+        "lean-provenance.mjs",
+        "lean-qualify.mjs",
+        "lean-reference.py",
+        "lean-requirements.mjs",
+        "lean-runtime-contracts.mjs",
+        "lean-tasks.mjs",
+        "lean.mjs",
+        "trading-catalog.mjs",
+        "trading-ir.mjs",
+        "trading-lean.mjs",
+        "trading-market.mjs",
+        "trading-observations.mjs",
+        "trading-runtime.mjs",
+        "trading-study.mjs",
+        "trading_broker.py",
+        "trading_lean.py",
+        "trading_market.py",
+        "trading_reference.py"
+      ]
+    }
+  ]
+}
