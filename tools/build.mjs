@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { bundleMcp } from "./mcp-bundle.mjs";
 import { readFile, writeFile, mkdir, copyFile, rm } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,7 @@ import { bundlePlugins } from "./plugin-bundle.mjs";
 import { CORE_RUNTIME_FILES } from "../src/benchmark/study-schema.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
+await bundleMcp(root);
 const configured = JSON.parse(await readFile("plugins.json", "utf8"));
 const plugins = Array.isArray(configured) ? { extensions: configured, runtime: [] } : configured;
 if (!plugins || !Array.isArray(plugins.extensions) || !Array.isArray(plugins.runtime))

@@ -1,6 +1,6 @@
 # Architecture and integration boundary
 
-ToolsEnabled Bench 0.2.0 is a standalone local product; its package and frozen generator retain the name ToolsEnabled BenchMark Builder. Its reusable benchmark subsystem has no ToolsEnabled Fleet, engine, account, or Electron dependency.
+ToolsEnabled Bench 0.3.0 is a standalone local product; its package and frozen generator retain the name ToolsEnabled BenchMark Builder. Its reusable benchmark subsystem has no ToolsEnabled Fleet, engine, account, or Electron dependency.
 
 ```text
 Browser workspace (src/app/)
@@ -51,6 +51,16 @@ Keep plugin initialization deterministic. Callback thunks defer work until invok
 A run contains its immutable package, metadata, log, and `results/` evidence. Editing a draft does not replace a run package. Cancellation requests graceful termination; an unconfirmed termination remains unconfirmed. Resume preserves the existing journal and ordinary runner lock rules. A server restart cannot silently authorize another process while a recorded PID may still be alive.
 
 Schemas 1–3 retain their historical runtime inventories. Original 0.1.0 exports retain their own generator, template citations, pinned CLI and deterministic reports. Inspecting an archive through the current app preserves its identity; a runtime that cannot be reconstructed exactly is opened with the applicable read-only limits. To change a study, explicitly make a new draft and freeze a new identity. Preserve the old archive.
+
+## MCP host integration
+
+`server/mcp.mjs` uses a pinned SDK bundled at build time for local stdio. It opens
+no network listener and shares ProjectStore/RunStore with the browser service.
+`server/mcp-service.mjs` maps twelve tools onto existing compiler and CLI operations;
+`server/local-origin.mjs` binds locally prepared study IDs/digests to the data store.
+Execution requires explicit study-ID confirmation plus local provenance or trust.
+Fixed artifact names, confined storage access, redaction and response bounds apply.
+See [MCP](MCP.md) for the complete tool and registration contract.
 
 ## Future host integration
 

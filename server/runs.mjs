@@ -13,6 +13,7 @@ import { safePath, RUNTIME_FILES } from "../src/benchmark/study.mjs";
 import { openProject } from "../src/benchmark/cli.mjs";
 import { zipFiles } from "../src/benchmark/export.mjs";
 import { atomicJSON } from "./store.mjs";
+import { localOriginKey, signOrigin } from "./local-origin.mjs";
 const validId = (id) => /^run-[a-f0-9]{32}$/.test(id);
 const active = [
   "queued",
@@ -26,7 +27,9 @@ const runtimeRefusal = () => new Error(
   "This project pins a different runtime or an incomplete runtime inventory. Local execution requires the complete installed runtime; inspect other exports with a trusted CLI without executing them.",
 );
 export class RunStore {
-  constructor(root, runtime) {
+  constructor(root, runtime, { logFilter = value => value } = {}) {
+    this.dataRoot = resolve(root);
+    this.logFilter = logFilter;
     this.root = resolve(root, "runs");
     this.runtime = resolve(runtime);
     this.children = new Map();
@@ -36,6 +39,7 @@ export class RunStore {
   }
   async init() {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
+    this.originKey = await localOriginKey(this.dataRoot);
   }
   directory(id) {
     if (!validId(id)) throw new Error("Unknown run.");
@@ -95,7 +99,7 @@ export class RunStore {
     if (!verified.runtime.isThisRuntime) throw runtimeRefusal();
     return verified.project;
   }
-  async create({ projectId, files }) {
+  async create({ projectId, files }, { execute = true } = {}) {
     if (
       !files ||
       typeof files !== "object" ||
@@ -134,15 +138,16 @@ export class RunStore {
         projectSha256: verified.sha256,
         purpose: verified.spec.executionPlan?.purpose || "legacy",
         createdAt: new Date().toISOString(),
-        status: "queued",
+        status: execute ? "queued" : "frozen",
         phase: "verify",
         history: [],
         log: "",
         directory: join(dir, "project"),
         files: Object.keys(files),
       };
+      record.localOrigin = signOrigin(this.originKey, record);
       await this.persist(record);
-      this.launch(record, ["verify", "qualify", "run", "analyze"]);
+      if (execute) this.launch(record, ["verify", "qualify", "run", "analyze"]);
       return record;
     } catch (error) {
       await atomicJSON(join(dir, "run.json"), {
@@ -196,7 +201,7 @@ export class RunStore {
         env: process.env,
       });
       const append = (chunk) => {
-        record.log = (record.log + chunk.toString()).slice(-256 * 1024);
+        record.log = this.logFilter((record.log + chunk.toString()).slice(-256 * 1024));
       };
       child.stdout.on("data", append);
       child.stderr.on("data", append);

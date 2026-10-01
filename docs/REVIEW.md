@@ -1,4 +1,4 @@
-# ToolsEnabled Bench 0.2.0 beta — review and artifact identity
+# ToolsEnabled Bench 0.3.0 beta — review and artifact identity
 
 ToolsEnabled Bench is a standalone local application, distributed under the MIT License and separate from ToolsEnabled Fleet. Its package and frozen generator retain the name ToolsEnabled BenchMark Builder. The service binds only to `127.0.0.1`.
 
@@ -33,7 +33,7 @@ Release sidecars distributed beside the source and runtime archives bind checks 
 
 Use these matching records for final source identifiers, test counts and hashes. They are external release receipts so the source does not need to embed its own final commit or archive hash. A result applies only to the inputs and artifacts named in its receipt. A changed source, dependency, notice or payload requires refreshed evidence.
 
-The runtime archive is named `toolsenabled-benchmark-builder-0.2.0.zip`. After checking its checksum against the matching release sidecar, extract it and run `node tools/release.mjs --verify`. The extracted `RELEASE-MANIFEST.json` checks its inventoried files. Hashes establish artifact identity, not publisher authentication.
+The runtime archive is named `toolsenabled-benchmark-builder-0.3.0.zip`. After checking its checksum against the matching release sidecar, extract it and run `node tools/release.mjs --verify`. The extracted `RELEASE-MANIFEST.json` checks its inventoried files. Hashes establish artifact identity, not publisher authentication.
 
 ## Public source and reproducibility
 

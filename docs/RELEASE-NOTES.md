@@ -1,3 +1,15 @@
+# 0.3.0 — local stdio MCP
+
+Twelve MCP tools drive existing authoring, freeze, export, qualification, run and
+report operations through the same local store. Execution requires study-ID
+confirmation and local provenance or explicit foreign-study trust. Responses are
+bounded, storage access confined, and credential-shaped content redacted.
+Registration snippets cover Claude Code, Codex, DeepSeek Harness, Cursor and
+Claude Desktop. The SDK is pinned and bundled into the offline runtime ZIP.
+Hosted HTTPS/OAuth is deferred. Real-client/security gates precede release.
+New freezes and template citations identify generator 0.3.0; historical frozen
+identities and template version 2.2.0 are preserved.
+
 # ToolsEnabled Bench 0.2.0 (package: toolsenabled-benchmark-builder)
 
 **Beta · MIT License · 2026-09-30**

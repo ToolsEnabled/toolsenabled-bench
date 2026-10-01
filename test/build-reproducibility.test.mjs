@@ -16,7 +16,7 @@ test('independent checkout paths produce identical browser asset names and bytes
   for (const name of ['checkout-first', 'different-checkout-name']) {
     const root = join(work, name);
     await mkdir(join(root, 'tools'), { recursive: true });
-    for (const source of ['package.json', 'plugins.json', 'index.html', 'src', 'plugins', 'tools/build.mjs', 'tools/plugin-bundle.mjs']) {
+    for (const source of ['package.json', 'plugins.json', 'index.html', 'src', 'plugins', 'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs']) {
       await cp(join(repo, source), join(root, source), { recursive: true });
     }
     await symlink(join(repo, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -30,6 +30,8 @@ test('independent checkout paths produce identical browser asset names and bytes
       }
     }
     await walk('dist');
+    await walk('server');
+    await walk('docs');
     inventories.push(inventory);
   }
   assert.deepEqual(inventories[0], inventories[1], 'asset identities must not depend on the absolute checkout directory');

@@ -23,7 +23,8 @@ async function fixture(t) {
     'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
     'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md', 'index.html',
     'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/check-benchmark-core-independent.mjs',
-    'tools/release.mjs', 'server/main.mjs', 'server/runs.mjs', 'server/store.mjs',
+    'tools/release.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-config.mjs',
+    'server/mcp.mjs', 'server/mcp-service.mjs', 'server/local-origin.mjs', 'server/data-root-lease.mjs', 'server/mcp-sdk.mjs', 'docs/MCP-LICENSES.md', 'server/main.mjs', 'server/runs.mjs', 'server/store.mjs',
     'src/benchmark/study.mjs', 'src/benchmark/cli.mjs', 'src/benchmark/plugins.mjs',
     'src/app/main.js', 'dist/index.html', 'dist/assets/app.js',
     'plugins/example.mjs', 'docs/ARCHITECTURE.md',
@@ -37,8 +38,9 @@ async function fixture(t) {
   };
   const writePluginMetadata = () => put('src/benchmark/plugins.mjs', '// benchmark-plugin-package: ' + JSON.stringify(pluginMetadata) + '\n');
   await writePluginMetadata();
-  await put('package.json', JSON.stringify({ name: '@toolsenabled/benchmark-builder', version: '0.2.0', engines: { node: '>=22.19.0' } }));
-  await put('package-lock.json', JSON.stringify({ version: '0.2.0', packages: { '': { version: '0.2.0' } } }));
+  await put('package.json', JSON.stringify({ name: '@toolsenabled/benchmark-builder', version: '0.2.0', engines: { node: '>=22.19.0' }, devDependencies: { '@modelcontextprotocol/sdk': '1.26.0' } }));
+  await put('package-lock.json', JSON.stringify({ version: '0.2.0', packages: { '': { version: '0.2.0', devDependencies: { '@modelcontextprotocol/sdk': '1.26.0' } }, 'node_modules/@modelcontextprotocol/sdk': { version: '1.26.0' } } }));
+  await put('server/mcp-sdk.json', JSON.stringify({ format: 'bench-mcp-sdk-bundle', version: 1, sdkVersion: '1.26.0', packages: [{ name: '@modelcontextprotocol/sdk', version: '1.26.0' }], sha256: digest(await readFile(join(root, 'server/mcp-sdk.mjs'))), entrySha256: digest(await readFile(join(root, 'tools/mcp-sdk-entry.mjs'))), licenseSha256: digest(await readFile(join(root, 'docs/MCP-LICENSES.md'))) }));
   return { root, put, pluginMetadata, writePluginMetadata };
 }
 
@@ -190,4 +192,27 @@ test('packaging requires plugin configuration and runtime dependency closure to 
   delete pluginMetadata.sourceHashes['plugins/example.mjs'];
   await writePluginMetadata();
   await assert.rejects(buildRelease({ root }), /Configured plugin entry is not source-bound/);
+});
+
+
+test('runtime archive includes the pinned MCP closure and registration helper', async t => {
+  const { root } = await fixture(t);
+  const built = await buildRelease({ root }); const files = entries(await readFile(built.archivePath));
+  for (const name of ['server/mcp.mjs', 'server/mcp-sdk.mjs', 'server/mcp-sdk.json', 'server/mcp-service.mjs', 'server/local-origin.mjs', 'tools/mcp-config.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-bundle.mjs', 'docs/MCP-LICENSES.md']) assert.ok(files.has(prefix + name), name);
+  assert.match(files.get(prefix + 'RELEASE.md').toString(), /node server\/mcp.mjs/);
+});
+test('packaging refuses missing or stale MCP SDK bundle bytes and floating pins', async t => {
+  const { root, put } = await fixture(t);
+  const source = await readFile(join(root, 'server/mcp-sdk.mjs'));
+  await put('server/mcp-sdk.mjs', 'changed');
+  await assert.rejects(buildRelease({ root }), /MCP/);
+  await put('server/mcp-sdk.mjs', source);
+  const pkg = JSON.parse(await readFile(join(root, 'package.json')));
+  pkg.devDependencies['@modelcontextprotocol/sdk'] = '^1.26.0';
+  await put('package.json', JSON.stringify(pkg));
+  await assert.rejects(buildRelease({ root }), /MCP/);
+  pkg.devDependencies['@modelcontextprotocol/sdk'] = '1.26.0';
+  await put('package.json', JSON.stringify(pkg));
+  await rm(join(root, 'server/mcp-sdk.mjs'));
+  await assert.rejects(buildRelease({ root }));
 });

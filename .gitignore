@@ -6,3 +6,7 @@ dist/
 
 .release-work/
 release/
+
+server/mcp-sdk.mjs
+server/mcp-sdk.json
+docs/MCP-LICENSES.md

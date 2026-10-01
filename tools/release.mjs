@@ -17,19 +17,20 @@ const TOP_LEVEL = [
   'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md',
 ];
 const TOOL_FILES = [
-  'tools/build.mjs', 'tools/plugin-bundle.mjs',
+  'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-config.mjs',
   'tools/check-benchmark-core-independent.mjs', 'tools/release.mjs',
 ];
 const TREES = new Map([
   ['src', new Set(['.js', '.mjs', '.css', '.json', '.svg', '.py'])],
-  ['server', new Set(['.mjs'])],
+  ['server', new Set(['.mjs', '.json'])],
   ['plugins', new Set(['.js', '.mjs', '.json', '.txt', '.csv', '.py', '.md'])],
   ['dist', new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.map'])],
   ['docs', new Set(['.md', '.txt', '.json', '.png', '.jpg', '.jpeg', '.svg'])],
 ]);
 const REQUIRED = [
   ...TOP_LEVEL, ...TOOL_FILES, 'server/main.mjs', 'server/runs.mjs',
-  'server/store.mjs', 'src/benchmark/study.mjs', 'src/benchmark/cli.mjs',
+  'server/store.mjs', 'server/local-origin.mjs', 'server/data-root-lease.mjs', 'server/mcp.mjs', 'server/mcp-service.mjs',
+  'server/mcp-sdk.mjs', 'server/mcp-sdk.json', 'docs/MCP-LICENSES.md', 'src/benchmark/study.mjs', 'src/benchmark/cli.mjs',
   'src/benchmark/plugins.mjs', 'src/app/main.js', 'dist/index.html',
 ];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -110,6 +111,21 @@ function checkPluginClosure(files) {
       requireValue(files.has('src/benchmark/' + name), `Required runtime plugin file is not included: src/benchmark/${name}`);
     }
   }
+}
+
+function checkMcpClosure(files, pkg, lock) {
+  const pin = pkg.devDependencies?.['@modelcontextprotocol/sdk'];
+  requireValue(typeof pin === 'string' && /^\d+\.\d+\.\d+$/.test(pin) &&
+    lock.packages?.['']?.devDependencies?.['@modelcontextprotocol/sdk'] === pin &&
+    lock.packages?.['node_modules/@modelcontextprotocol/sdk']?.version === pin,
+    'MCP SDK must have one exact matching package and lockfile pin.');
+  const meta = JSON.parse(files.get('server/mcp-sdk.json').toString('utf8'));
+  requireValue(meta.format === 'bench-mcp-sdk-bundle' && meta.version === 1 && meta.sdkVersion === pin &&
+    Array.isArray(meta.packages) && meta.packages.some(row => row.name === '@modelcontextprotocol/sdk' && row.version === pin) &&
+    meta.sha256 === sha256(files.get('server/mcp-sdk.mjs')) &&
+    meta.entrySha256 === sha256(files.get('tools/mcp-sdk-entry.mjs')) &&
+    meta.licenseSha256 === sha256(files.get('docs/MCP-LICENSES.md')),
+    'MCP SDK bundle or licences differ from the pinned build. Run npm run build.');
 }
 
 async function outputDirectoryFor(requested) {
@@ -210,6 +226,8 @@ function releaseReadme(pkg) {
     'Extract the ZIP, open its directory, and run:\n\n```sh\nnode tools/release.mjs --verify\nnode server/main.mjs\n```\n\n' +
     'Open http://127.0.0.1:4318. The server binds only to 127.0.0.1. Projects and runs are stored in `.benchmark-data/` in the extracted directory. Back up that directory. `BENCHMARK_DATA_DIR` and `BENCHMARK_PORT` can select another local data directory and port.\n\n' +
     'The examples are authored recorded controls, with no live model-result claims. External collectors require their separately declared environment. Optional native Lean execution requires its Python/Docker apparatus; it is not needed for the recorded examples.\n\n' +
+    '## MCP over stdio\n\n' +
+    'Run `node server/mcp.mjs` from your MCP host. The pinned SDK and its licences are bundled: no package install or network is required. `node tools/mcp-config.mjs --client codex` prints registration (also claude, deepseek, cursor and claude-desktop). See docs/MCP.md. MCP and the browser use the same .benchmark-data store. study.run and study.qualify execute declared code and require confirm equal to the study ID; foreign studies also need explicit trust.\n\n' +
     '## Rebuild or repackage\n\n' +
     'Browser, plugin, and server sources are included. Rebuilding requires the locked development dependencies (`npm ci`), then `npm run build`. Serving the existing build needs no dependencies. Repackage unchanged included files with `node tools/release.mjs`; archives use sorted paths, stored bytes, fixed timestamps and fixed file modes. The sibling `.sha256` file hashes the complete ZIP. `RELEASE-MANIFEST.json` hashes each included file except itself; it is an integrity inventory, not a signature or proof of publisher identity.\n\n' +
     'This runtime distribution omits development test suites and historical test fixtures. The source-checkout validation commands in README.md (`npm test`, `npm run test:standalone`, `npm run test:browser`) apply to the full source repository. The included `npm run check:core` can be used after rebuilding.\n';
@@ -225,6 +243,7 @@ export async function buildRelease({ root = sourceRoot, outputDirectory = resolv
   const lock = JSON.parse(files.get('package-lock.json').toString('utf8'));
   requireValue(lock.version === pkg.version && lock.packages?.['']?.version === pkg.version, 'Package and lockfile versions differ.');
   checkPluginClosure(files);
+  checkMcpClosure(files, pkg, lock);
   files.set('RELEASE.md', Buffer.from(releaseReadme(pkg)));
   const manifest = {
     format: 'toolsenabled-benchmark-builder-release', version: 1,

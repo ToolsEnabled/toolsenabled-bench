@@ -1360,3 +1360,9 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+
+## MCP runtime bundle
+
+The exact MCP SDK closure and complete dependency licence texts are generated in
+`docs/MCP-LICENSES.md` by the locked build and included in every runtime ZIP.
+`server/mcp-sdk.json` records their names, versions and bundle hashes.
