@@ -1,4 +1,5 @@
 import test from "node:test";
+import { gunzipSync } from "node:zlib";
 import { request as httpRequest } from "node:http";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -223,7 +224,7 @@ test("cancellation stops an exported command collector and retains its interrupt
 });
 
 test("historical citations retain the inherited template; freezing does not claim prospective registration", async () => {
-  const { templateCitation, GENERATOR } = await import(
+  const { templateCitation, GENERATOR, verifyProject } = await import(
     "../src/benchmark/study.mjs"
   );
   const { researchReportFiles } = await import("../src/benchmark/report.mjs");
@@ -238,10 +239,10 @@ test("historical citations retain the inherited template; freezing does not clai
   const project = await freezeStudy(spec),
     citation = await templateCitation(project);
   assert.equal(citation.template.generator.name, GENERATOR.name);
-  const old = await freezeStudy({
-    ...spec,
-    generator: { name: "ToolsEnabled", version: "1.0.49" },
-  });
+  const old = JSON.parse(gunzipSync(await readFile(new URL(
+    "../tools/test/fixtures/research-benchmark-endpoints-project.json.gz", import.meta.url,
+  ))));
+  await verifyProject(old);
   const oldCitation = await templateCitation(old);
   assert.equal(
     oldCitation.template.title,

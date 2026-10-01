@@ -22,14 +22,29 @@ test('independent checkout paths produce identical browser asset names and bytes
     await symlink(join(repo, 'node_modules'), join(root, 'node_modules'), 'dir');
     await promisify(execFile)(process.execPath, ['tools/build.mjs'], { cwd: root, timeout: 60000 });
     const inventory = {};
+    let releaseLabels = 0;
+    const { version } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     async function walk(folder) {
       for (const item of await readdir(join(root, folder), { withFileTypes: true })) {
         const path = folder + '/' + item.name;
         if (item.isDirectory()) await walk(path);
-        else inventory[path] = createHash('sha256').update(await readFile(join(root, path))).digest('hex');
+        else {
+          const bytes = await readFile(join(root, path));
+          inventory[path] = createHash('sha256').update(bytes).digest('hex');
+          if (folder.startsWith('dist')) {
+            // Dependency/schema/template versions and historical provenance are
+            // distinct identities. Check every shipped asset's release labels.
+            const content = bytes.toString('utf8');
+            for (const match of content.matchAll(/(?:RESEARCH WORKSPACE <span>v|Research preview (?:·|\\xB7) |BenchMark Builder, version )(\d+\.\d+\.\d+)/g)) {
+              releaseLabels++;
+              assert.equal(match[1], version, `stale release identity in ${path}: ${match[0]}`);
+            }
+          }
+        }
       }
     }
     await walk('dist');
+    assert.ok(releaseLabels >= 3, 'sidebar, overview and methods release identities must ship');
     await walk('server');
     await walk('docs');
     inventories.push(inventory);

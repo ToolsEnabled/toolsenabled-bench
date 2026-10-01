@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { gunzipSync } from 'node:zlib'
 import { canonical, sha256 } from '../../src/benchmark/prompts.mjs'
 import { CORE_RUNTIME_FILES, RUNTIME_FILES, bindRuntimeSources, freezeStudy, runtimeFilesFor } from '../../src/benchmark/study.mjs'
 import { genericStarter, newExperimentDraft } from '../../src/benchmark/starters.mjs'
@@ -131,4 +132,16 @@ test('archive inspection uses the archived schema-4 plugin inventory across diff
   delete without[extra]; delete strippedManifest.files[extra]
   without['manifest.json'] = canonical(strippedManifest) + '\n'
   await assert.rejects(() => readExportedProject(without, { sources }), /different-plugin\.mjs/)
+})
+
+// An older intact archive with a compiler difference must be explained using
+// its frozen identity, just like verifyProject; a new freeze would restamp it.
+test('an older archive rebuild explanation omits restamping-only differences', async () => {
+  const files = JSON.parse(gunzipSync(await readFile(new URL('../../test/fixtures/standalone-0.3.0.json.gz', import.meta.url))))
+  const foreign = await reseal(files, project => { project.schedule[0].taskId = 'historical-task-id' })
+  const opened = await readExportedProject(foreign, { sources })
+  assert.equal(opened.integrity.ok, true)
+  assert.equal(opened.rebuild.verified, false)
+  assert.equal(opened.project.spec.generator.version, '0.3.0')
+  assert.deepEqual(opened.rebuild.differing.sort(), ['schedule.0.taskId', 'sha256'])
 })

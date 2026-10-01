@@ -1,6 +1,6 @@
 # Bench as a local MCP server
 
-Bench 0.3.0 exposes twelve tools through the official MCP SDK 1.26.0 over stdio.
+Bench 0.3.1 exposes twelve tools through the official MCP SDK 1.26.0 over stdio.
 The runtime ZIP includes the bundled SDK and all bundled dependency licences.
 Node.js 22.19 or later is the only requirement for the recorded examples. There
 is no package installation at runtime, network listener, account or hosted server.
@@ -130,7 +130,7 @@ A host can drive the whole offline example with these calls:
 
 The default study replays two authored arithmetic responses. It makes no model
 call and supplies no model-performance evidence. Scientific experiments retain
-Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations identify generator 0.3.0. Historical frozen
+Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations identify generator 0.3.1. Historical frozen
 identities and the template version 2.2.0 are preserved.
 
 ## Execution, foreign studies and bounds
@@ -183,7 +183,7 @@ process, or set a different `BENCHMARK_DATA_DIR`. The lease covers readers too:
 another process cannot misclassify an active run as interrupted or resume it.
 Use a local filesystem and one host/PID namespace for each data root. Older Bench
 versions and direct low-level store scripts do not honor this lease; stop them
-before using 0.3.0. It is not a boundary against hostile same-user code.
+before using 0.3.1. It is not a boundary against hostile same-user code.
 
 Clean shutdown, SIGINT and SIGTERM retain ownership until admitted operations and
 owned runs settle, then remove the lease. MCP also does this when stdin closes.

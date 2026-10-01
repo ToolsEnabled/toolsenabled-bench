@@ -7,6 +7,7 @@ import { bundlePlugins } from "./plugin-bundle.mjs";
 import { CORE_RUNTIME_FILES } from "../src/benchmark/study-schema.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
+const { version } = JSON.parse(await readFile("package.json", "utf8"));
 await bundleMcp(root);
 const configured = JSON.parse(await readFile("plugins.json", "utf8"));
 const plugins = Array.isArray(configured) ? { extensions: configured, runtime: [] } : configured;
@@ -37,6 +38,7 @@ await build({
   platform: "browser",
   target: "es2022",
   minify: true,
+  define: { __BENCH_VERSION__: JSON.stringify(version) },
   metafile: true,
   logLevel: "info",
   plugins: [
@@ -59,5 +61,4 @@ await build({
 });
 await copyFile("index.html", "dist/index.html");
 await copyFile("src/app/favicon.svg", "dist/favicon.svg");
-const { version } = JSON.parse(await readFile("package.json", "utf8"));
 console.log("Built ToolsEnabled BenchMark Builder " + version);

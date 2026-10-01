@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createHash } from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { canonical } from '../../src/benchmark/prompts.mjs'
 import { analyze, endpointRecord, validateAnalysisPlan, ENDPOINT_RECORD_FIELDS } from '../../src/benchmark/analysis.mjs'
-import { bindRuntimeSources, freezeStudy, RUNTIME_FILES } from '../../src/benchmark/study.mjs'
+import { bindRuntimeSources, freezeStudy, verifyProject, RUNTIME_FILES } from '../../src/benchmark/study.mjs'
 import { runStudy } from '../../src/benchmark/runner.mjs'
 import { researchReportFiles } from '../../src/benchmark/report.mjs'
 import { pageReportOptions } from './fixtures/research-page-report-options.mjs'
@@ -50,25 +51,23 @@ const typedEndpoints = () => [
 const group = (summary, id, condition) => summary.endpoints.groups.find(row => row.endpoint === id && row.condition === condition)
 const readinessBody = project => { const { bindings, sha256, ...body } = project.readiness; return body }
 
-// The control below compares a frozen identity against a digest recorded by an earlier
-// release, so every input to that identity has to be pinned or it re-freezes differently
-// at each bump for reasons that say nothing about the study. The runtime digests were
-// already supplied by the caller for exactly that reason; spec.generator was the one input
-// left live, and compileStudy stamps it with the RUNNING release when the spec declares
-// none (study.mjs:667). Declaring it is what a real frozen study does, and it costs no
-// coverage: the stamp is asserted against package.json by
-// research-benchmark-generator-identity.test.mjs, and a freeze that ignored the declared
-// value and re-stamped anyway would move projectSha256 and fail the control below.
-test('the fixture pins the release that recorded it, so nothing about the running application reaches the frozen identity', async () => {
-  assert.deepEqual(endpointStudy(baseline.runtimeSources).generator, RECORDED_GENERATOR,
-    'mutation `drop the fixture generator pin` survived: expected the fixture to declare the release it was recorded under')
-  const project = await freezeStudy(endpointStudy(baseline.runtimeSources))
-  assert.deepEqual(project.spec.generator, { ...RECORDED_GENERATOR },
-    'mutation `re-stamp a declared generator at freeze` survived: expected the recorded release to be preserved, not overwritten with the running one')
+// Captured before the new-freeze stamping correction, matching the unchanged
+// historical baseline. Verification, not a new freeze, preserves old identities.
+const historicalProject = () => readFile(new URL('./fixtures/research-benchmark-endpoints-project.json.gz', import.meta.url))
+  .then(bytes => JSON.parse(gunzipSync(bytes)))
+test('verification preserves the historical endpoint project and recorded generator', async () => {
+  const project = await historicalProject()
+  const before = structuredClone(project)
+  await verifyProject(project)
+  assert.deepEqual(project, before)
+  assert.equal(project.sha256, baseline.projectSha256)
+  assert.deepEqual(project.spec.generator, { ...RECORDED_GENERATOR })
+  assert.deepEqual(project.spec.runtimeSources, baseline.runtimeSources)
 })
 
 test('a frozen project without endpoints analyzes and reports byte-identically to the base commit snapshot', async () => {
-  const project = await freezeStudy(endpointStudy(baseline.runtimeSources))
+  const project = await historicalProject()
+  await verifyProject(project)
   assert.equal(project.sha256, baseline.projectSha256, 'frozen project identity at base ' + baseline.baseCommit)
   const result = await runStudy(project, { now: () => FIXED_NOW })
   assert.equal(digest(canonical(result.events)), baseline.journalSha256)

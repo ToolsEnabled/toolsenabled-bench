@@ -812,6 +812,7 @@ p {
   border-color: #edceb7;
 }
 .run-identity {
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: 11px;
   color: #506748;

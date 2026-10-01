@@ -23,18 +23,18 @@
 //   3. `--write` also requires `--reason`, because the fixture's own provenance block
 //      is the only record of why a digest moved, and the two precedents both carry one.
 //
-// The identity digests get the loudest treatment: projectSha256, journalSha256 and
-// summarySha256 moving means the frozen project itself re-froze differently, which for
-// this fixture should now be impossible -- it pins its own generator
-// (research-benchmark-endpoints.mjs RECORDED_GENERATOR), so nothing about the running
-// release reaches its identity. If they move, a compiler changed. Read it, do not record it.
+// Read and verify the historical frozen project itself. Creating a new freeze
+// stamps the running package's generator; it cannot measure an old identity.
+// Project verification must fail before recording if the compiler drifts. Journal
+// or summary drift after verification concerns the runner or analysis.
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { canonical } from '../src/benchmark/prompts.mjs'
-import { freezeStudy, GENERATOR } from '../src/benchmark/study.mjs'
+import { gunzipSync } from 'node:zlib'
+import { verifyProject, GENERATOR } from '../src/benchmark/study.mjs'
 import { runStudy } from '../src/benchmark/runner.mjs'
 import { researchReportFiles } from '../src/benchmark/report.mjs'
-import { endpointStudy, FIXED_NOW, RECORDED_GENERATOR } from './test/fixtures/research-benchmark-endpoints.mjs'
+import { FIXED_NOW, RECORDED_GENERATOR } from './test/fixtures/research-benchmark-endpoints.mjs'
 
 const FIXTURE = new URL('./test/fixtures/research-benchmark-endpoints-baseline.json', import.meta.url)
 const digest = text => createHash('sha256').update(text).digest('hex')
@@ -42,7 +42,8 @@ const flag = name => process.argv.includes('--' + name)
 const value = name => { const at = process.argv.indexOf('--' + name); return at === -1 ? null : process.argv[at + 1] ?? null }
 
 const baseline = JSON.parse(await readFile(FIXTURE, 'utf8'))
-const project = await freezeStudy(endpointStudy(baseline.runtimeSources))
+const project = JSON.parse(gunzipSync(await readFile(new URL('./test/fixtures/research-benchmark-endpoints-project.json.gz', import.meta.url))))
+await verifyProject(project)
 const result = await runStudy(project, { now: () => FIXED_NOW })
 const files = await researchReportFiles(project, result.events)
 
@@ -82,13 +83,13 @@ const clean = !identityMoves.length && !added.length && !removed.length && !move
 
 console.log('Fixture: ' + FIXTURE.pathname)
 console.log('Recorded under ToolsEnabled ' + RECORDED_GENERATOR.version + ', running ToolsEnabled ' + GENERATOR.version
-  + ' (the fixture pins its own generator, so the running release must not reach its identity)')
+  + ' (measuring the verified stored project without restamping its generator)')
 console.log('')
 if (clean) { console.log('Nothing to record: every digest in the fixture matches what this tree produces.'); process.exit(0) }
 
 if (identityMoves.length) {
-  console.log('THE FROZEN IDENTITY MOVED. This fixture pins its generator, so no application bump can')
-  console.log('cause this. A compiler, the runner or the analysis changed. Read the change before recording it.')
+  console.log('STORED PROJECT OR EXECUTION DIGESTS DIFFER from the baseline.')
+  console.log('The stored project verified. Check fixture provenance, the runner and analysis before recording.')
   for (const row of identityMoves) console.log('  ' + row.key + '\n    was ' + row.from + '\n    now ' + row.to)
   console.log('')
 }

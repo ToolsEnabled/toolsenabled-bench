@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { observationPlanFromSpec, observeResponse } from '../../src/benchmark/observations.mjs'
 import { canonical } from '../../src/benchmark/prompts.mjs'
@@ -219,7 +220,8 @@ test('a dispatching condition retains the exact envelope it sent, and the adapte
 })
 
 test('a replay study dispatches nothing, so it retains no envelope and its journal is byte-unchanged', async () => {
-  const project = await freezeStudy(endpointStudy(endpointsBaseline.runtimeSources))
+  const project = JSON.parse(gunzipSync(await readFixture(new URL('./fixtures/research-benchmark-endpoints-project.json.gz', import.meta.url))))
+  assert.equal(project.sha256, endpointsBaseline.projectSha256)
   const result = await runStudy(project, { now: () => FIXED_NOW })
   assert.ok(result.events.filter(row => row.type === 'started').every(row => !row.request),
     'a replayed saved response was never sent anywhere; there is no envelope to retain')

@@ -8,18 +8,10 @@ import { developmentDraft } from './research-benchmark-development.mjs'
 export const FIXED_NOW = 1700000000000
 // The release that recorded this fixture's byte-identity control, declared here for the
 // same reason the runtime digests above are supplied by the caller rather than read live.
-// compileStudy stamps spec.generator with the RUNNING release only when the spec declares
-// none (study.mjs:667), and that stamp is inside the frozen project digest. An unpinned
-// fixture therefore re-froze under a different identity at every application bump: moving
-// to 1.0.45 moved projectSha256, and with it the journal (which carries projectSha256 and
-// readinessSha256 in all 32 events), the summary and 23 report files - a red at every
-// release that says nothing about the frozen study this control exists to protect.
-// Declaring the pin is what a real frozen study does, so the control now behaves like one:
-// it still catches any compiler, analysis or report change, and it additionally catches a
-// regression in the preservation rule itself, because a freeze that overwrote this declared
-// value would move projectSha256 too. That the pin reproduces digests recorded by the .44
-// app is the evidence it is the right value. The stamp's own correctness is asserted where
-// it belongs, against package.json, by research-benchmark-generator-identity.test.mjs.
+// The historical project's full frozen bytes are retained in
+// research-benchmark-endpoints-project.json.gz and checked against the unchanged
+// baseline. New freezes replace this draft stamp with the current package;
+// verification of that already-frozen project preserves the recorded stamp.
 export const RECORDED_GENERATOR = Object.freeze({ name: 'ToolsEnabled', version: '1.0.44' })
 
 // The schema this control was recorded under, pinned for exactly the reason the

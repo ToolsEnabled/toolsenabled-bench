@@ -21,6 +21,9 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(app.origin);
+  await page.getByRole("heading", { name: "Create your first study" }).waitFor();
+  assert.deepEqual(await app.projects.list(), []);
+  await page.locator('[data-action="new"]').click();
   await page
     .getByRole("heading", { name: "Build the benchmark. Keep the evidence." })
     .waitFor();

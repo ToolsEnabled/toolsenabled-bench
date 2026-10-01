@@ -243,3 +243,20 @@ test('MCP analysis never invokes a retained custom grader', async t => {
   assert.equal((await call('report.get', { studyId: s.studyId })).data.customGrading.verification, 'retained-not-reexecuted');
   await assert.rejects(readFile(join(directory, 'grader-ran')), { code: 'ENOENT' });
 });
+
+
+test('MCP new freezes replace a carried draft generator with the installed package identity', async t => {
+  const { root, call } = await fixture(t);
+  const { GENERATOR } = await import('../src/benchmark/study.mjs');
+  const draft = spec();
+  draft.generator = { name: GENERATOR.name, version: '9.9.9-certified' };
+  const p = await call('composition.update', { spec: draft });
+  const study = await call('study.freeze', { projectId: p.id, revision: p.revision });
+  const directory = join(root, 'runs', study.studyId, 'project');
+  const project = JSON.parse(await readFile(join(directory, 'project.json')));
+  assert.deepEqual(project.spec.generator, GENERATOR);
+  assert.equal(JSON.parse(await readFile(join(directory, 'package.json'))).toolsenabled.generator, `${GENERATOR.name} ${GENERATOR.version}`);
+  const citation = await readFile(join(directory, 'CITATION.cff'), 'utf8');
+  assert.ok(citation.includes(GENERATOR.version));
+  assert.ok(!citation.includes('9.9.9-certified'));
+});

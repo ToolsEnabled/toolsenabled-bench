@@ -4,16 +4,17 @@
 // run against modules it never pinned, or it is not reproducible.
 //
 // This suite is the promise that bump makes: a project frozen under schema 2
-// still freezes to the same identity and still runs, against the 45-file
+// still verifies with the same identity and still runs, against the 45-file
 // inventory it was frozen with, on a build with a configurable inventory. And the guard that
 // makes the promise worth having is still a guard: a study that does not pin its
 // own version's runtime completely is still refused.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { gunzipSync } from 'node:zlib'
 import {
   CORE_RUNTIME_FILES, LEGACY_RUNTIME_FILES, RUNTIME_FILES, V2_RUNTIME_FILES, V3_RUNTIME_FILES, STUDY_VERSION, SUPPORTED_SCHEMA_VERSIONS,
-  bindRuntimeSources, freezeStudy, modernSchema, runtimeFilesFor, runtimeFilesForVersion,
+  bindRuntimeSources, freezeStudy, verifyProject, modernSchema, runtimeFilesFor, runtimeFilesForVersion,
 } from '../../src/benchmark/study.mjs'
 import { genericStarter, newExperimentDraft } from '../../src/benchmark/starters.mjs'
 import { runStudy } from '../../src/benchmark/runner.mjs'
@@ -21,6 +22,7 @@ import { PLUGIN_RUNTIME_FILES } from '../../src/benchmark/runtime-inventory.mjs'
 import { endpointStudy, FIXED_NOW, RECORDED_SCHEMA_VERSION } from './fixtures/research-benchmark-endpoints.mjs'
 
 const baseline = JSON.parse(await readFile(new URL('./fixtures/research-benchmark-endpoints-baseline.json', import.meta.url), 'utf8'))
+const frozenEndpoint = async () => JSON.parse(gunzipSync(await readFile(new URL('./fixtures/research-benchmark-endpoints-project.json.gz', import.meta.url))))
 const liveSources = Object.fromEntries(await Promise.all(RUNTIME_FILES.map(async file =>
   [file, await readFile(new URL('../../src/benchmark/' + file, import.meta.url), 'utf8')])))
 
@@ -66,11 +68,12 @@ test('a new draft is the current schema, so new studies get the current runtime'
 // The fixture pins the digests recorded at its base commit, so this is a real
 // schema-2 project: frozen before the seam modules existed, against a build that
 // now ships five more files than it knows about.
-test('a schema-2 project frozen before schema 3 still freezes to its recorded identity', async () => {
-  const spec = endpointStudy(baseline.runtimeSources)
+test('a schema-2 project frozen before schema 3 still verifies with its recorded identity', async () => {
+  const project = await frozenEndpoint()
+  const { spec } = project
   assert.equal(spec.schemaVersion, RECORDED_SCHEMA_VERSION)
   assert.equal(Object.keys(spec.runtimeSources).length, V2_RUNTIME_FILES.length)
-  const project = await freezeStudy(spec)
+  await verifyProject(project)
   assert.equal(project.version, 2)
   assert.equal(project.sha256, baseline.projectSha256, 'the schema-2 identity must not move when the build gains runtime modules')
   assert.deepEqual(project.runtimeFiles, V2_RUNTIME_FILES, 'it pins its own version inventory, not the build\'s')
@@ -78,7 +81,7 @@ test('a schema-2 project frozen before schema 3 still freezes to its recorded id
 })
 
 test('a schema-2 project frozen before schema 3 still RUNS on a build with configured plugins', async () => {
-  const project = await freezeStudy(endpointStudy(baseline.runtimeSources))
+  const project = await frozenEndpoint()
   const result = await runStudy(project, { now: () => FIXED_NOW })
   assert.ok(result.summary.completed > 0, 'the schema-2 study must actually complete trials')
   assert.equal(result.events.filter(event => event.type === 'finished').length, result.summary.completed)

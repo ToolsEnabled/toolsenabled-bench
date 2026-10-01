@@ -1,3 +1,11 @@
+# 0.3.1 — web release fixes
+
+- Sidebar, overview and methods citations use the package version injected at build time.
+- Opening, reloading and navigating a saved project leave its bytes and revision unchanged; real edits still save locally.
+- Freeze & review lists retained studies from MCP, CLI and web runs, with their complete SHA-256 and original frozen package.
+- New freezes and template citations identify generator 0.3.1. The research template remains 2.2.0 and historical fixtures and frozen identities are preserved.
+- Data-root leases and execution admission are unchanged.
+
 # 0.3.0 — local stdio MCP
 
 Twelve MCP tools drive existing authoring, freeze, export, qualification, run and

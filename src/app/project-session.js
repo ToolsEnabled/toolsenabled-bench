@@ -3,11 +3,13 @@ export function createProjectSession({
   read,
   write,
   snapshot,
+  identify,
   load,
   isBusy = () => false,
   onState = () => {},
   onSaved = async () => {},
 }) {
+  const identities = new Map(), queuedIdentities = new Map();
   const revisions = new Map(),
     generations = new Map(),
     saved = new Map(),
@@ -49,14 +51,26 @@ export function createProjectSession({
     },
     save(id, draft) {
       const atGeneration = generation(id);
+      const identity = identify?.(draft);
+      const queued = queuedIdentities.get(id) || [];
+      const entry = { identity };
+      queued.push(entry);
+      queuedIdentities.set(id, queued);
       pending.set(id, (pending.get(id) || 0) + 1);
-      errors.delete(id);
       publish();
       const task = queue
         .then(async () => {
           if (!revisions.has(id))
             throw new Error("Open this project before saving it.");
+          // Recheck in the save queue: two requests for the same edit must
+          // not produce two revisions, and hydration must never be persisted.
+          if (identify && !errors.has(id) && identities.get(id) === identity) {
+            saved.set(id, atGeneration);
+            errors.delete(id);
+            return { revision: revisions.get(id) };
+          }
           const result = await write(id, draft, revisions.get(id));
+          if (identify) identities.set(id, identity);
           revisions.set(id, result.revision);
           saved.set(id, atGeneration);
           errors.delete(id);
@@ -64,10 +78,15 @@ export function createProjectSession({
           return result;
         })
         .catch((error) => {
+          // A failed write (especially a revision conflict) gives no assurance
+          // that the old cached identity is still what is on disk.
+          identities.delete(id);
           errors.set(id, error.message);
           throw error;
         })
         .finally(() => {
+          queued.splice(queued.indexOf(entry), 1);
+          if (!queued.length) queuedIdentities.delete(id);
           pending.set(id, pending.get(id) - 1);
           publish();
         });
@@ -98,9 +117,15 @@ export function createProjectSession({
       return state().hasUnsavedChanges;
     },
     markEdited() {
-      if (!current || switching) return;
+      if (!current || switching) return false;
+      // Compare with the end of the save queue. A revert to the confirmed
+      // identity is still an edit when an older queued write will replace it.
+      const queued = queuedIdentities.get(current);
+      const projected = queued?.length ? queued.at(-1).identity : identities.get(current);
+      if (identify && !errors.has(current) && projected === identify(snapshot())) return false;
       generations.set(current, generation(current) + 1);
       publish();
+      return true;
     },
     saveCurrent,
     async select(id) {
@@ -117,6 +142,7 @@ export function createProjectSession({
         if (result?.ok === false)
           throw new Error(result.reason || "The project could not be opened.");
         current = id;
+        if (identify) identities.set(id, identify(snapshot()));
         saved.set(id, generation(id));
         errors.delete(id);
       } finally {

@@ -1,6 +1,6 @@
 # ToolsEnabled Bench
 
-**Version 0.3.0 beta · MIT License**
+**Version 0.3.1 beta · MIT License**
 
 ToolsEnabled Bench is a standalone research workbench for composing benchmark tasks, freezing protocols, exporting runnable studies and regenerating reports from retained evidence. It stores projects locally and requires no ToolsEnabled account. It is a separate product from ToolsEnabled Fleet. The worked UI examples use authored recorded controls; they contain no live model measurements.
 
@@ -16,7 +16,7 @@ ToolsEnabled Bench is a standalone research workbench for composing benchmark ta
 
 ## Run the prebuilt release
 
-Requires **Node.js 22.19 or later**. Extract `toolsenabled-benchmark-builder-0.3.0.zip`, open its directory and run:
+Requires **Node.js 22.19 or later**. Extract `toolsenabled-benchmark-builder-0.3.1.zip`, open its directory and run:
 
 ```sh
 node tools/release.mjs --verify
@@ -29,7 +29,7 @@ The archive includes `RELEASE.md` and a file hash inventory. Release sidecars `S
 
 ## MCP hosts
 
-Bench 0.3.0 also runs as a local stdio MCP server: `node server/mcp.mjs`.
+Bench 0.3.1 also runs as a local stdio MCP server: `node server/mcp.mjs`.
 The runtime ZIP includes its pinned SDK; no runtime install or network is needed.
 Run `node tools/mcp-config.mjs --client codex` to print registration; `claude`,
 `deepseek`, `cursor` and `claude-desktop` are supported too. See [MCP setup and tool
@@ -108,4 +108,4 @@ Copyright (c) 2026 Joshua Pinckard. Distributed under the [MIT License](LICENSE)
 
 Joshua Pinckard conceived the project, defined its objectives and requirements, directed the autonomous agent workflows, selected and evaluated outputs, and assumes responsibility for the research methodology and conclusions. AI agents generated substantial portions of the implementation and written drafts. See [ATTRIBUTION.md](ATTRIBUTION.md).
 
-The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). The 0.3.0 package and frozen generator retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.
+The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). The 0.3.1 package and frozen generator retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.

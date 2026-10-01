@@ -27,7 +27,7 @@ test('stdio initialize/list and full recorded compose → freeze → export → 
   t.after(async () => { child.stdin.end(); child.kill('SIGTERM'); await closed; lines.close(); await rm(root, { recursive: true, force: true }); });
   const request = (method, params) => new Promise((resolve, reject) => { const id = ++seq; pending.set(id, { resolve, reject }); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
   const info = await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'bench-independent-test', version: '1' } });
-  assert.equal(info.serverInfo.version, '0.3.0');
+  assert.equal(info.serverInfo.version, JSON.parse(await readFile(resolve('package.json'), 'utf8')).version);
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const { tools } = await request('tools/list', {}); assert.equal(tools.length, 12);
   const call = async (name, args = {}) => { const r = await request('tools/call', { name, arguments: args }); assert.ok(!r.isError, JSON.stringify(r)); return JSON.parse(r.content[0].text); };

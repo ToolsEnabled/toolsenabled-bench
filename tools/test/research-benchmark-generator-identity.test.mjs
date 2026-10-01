@@ -1,10 +1,11 @@
 // HT-1: the frozen project, and every report rendered from it, must name the
 // generator that froze it. The stamp is recorded at freeze time and preserved
-// on re-freeze, so a project frozen by one release still verifies under a later
-// one, and the page and the exported CLI keep rendering identical bytes.
+// on verification. A new freeze always records the running package version;
+// an already-frozen project keeps its recorded identity and report bytes.
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
+import { gunzipSync } from 'node:zlib'
 import { approveBundle } from '../../src/benchmark/prompts.mjs'
 import { genericStarter, newExperimentDraft } from '../../src/benchmark/starters.mjs'
 import { bindRuntimeSources, freezeStudy, verifyProject, GENERATOR, RUNTIME_FILES } from '../../src/benchmark/study.mjs'
@@ -39,20 +40,18 @@ test('the generator constant is the shipped application version, so it cannot dr
 test('freezing records the generator inside the frozen project, and the digest covers it', async () => {
   const project = await generic()
   assert.deepEqual(project.spec.generator, { name: 'ToolsEnabled BenchMark Builder', version: GENERATOR.version })
-  const other = structuredClone(project.spec)
-  other.generator = { name: 'ToolsEnabled', version: '0.0.1-fixture' }
-  const refrozen = await freezeStudy(other)
-  assert.notEqual(refrozen.sha256, project.sha256, 'the recorded generator is inside the frozen project digest')
+  const forged = structuredClone(project)
+  forged.spec.generator = { name: 'ToolsEnabled', version: '0.0.1-fixture' }
+  await assert.rejects(verifyProject(forged), 'changing a frozen generator invalidates the digest')
 })
 
-test('a project frozen by another release still verifies, because the recorded stamp is preserved', async () => {
-  const project = await generic()
-  const older = structuredClone(project.spec)
-  older.generator = { name: 'ToolsEnabled', version: '0.0.1-fixture' }
-  const refrozen = await freezeStudy(older)
-  assert.deepEqual(refrozen.spec.generator, { name: 'ToolsEnabled', version: '0.0.1-fixture' },
-    're-freezing must preserve a recorded generator, never overwrite it with the running release')
-  await verifyProject(refrozen)
+test('a real project frozen by another release still verifies with its original stamp', async () => {
+  const files = JSON.parse(gunzipSync(await readFile(new URL('../../test/fixtures/standalone-0.3.0.json.gz', import.meta.url))))
+  const project = JSON.parse(files['project.json'])
+  const before = structuredClone(project)
+  await verifyProject(project)
+  assert.deepEqual(project, before)
+  assert.deepEqual(project.spec.generator, { name: GENERATOR.name, version: '0.3.0' })
 })
 
 test('the report names the generator and no longer disclaims generator identity', async () => {

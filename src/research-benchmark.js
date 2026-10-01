@@ -1,4 +1,5 @@
 import { el } from './components.js'
+import { persistedDraftIdentity } from './research-draft-identity.mjs'
 import { createReviewRecord, canonical, compilePrompt, invariant, object, reviewStatus, sha256 } from './benchmark/prompts.mjs'
 import { slotAccepts, slotRoleText, slotRoles } from './benchmark/composition.mjs'
 import { benchmarkForDomain, declaresPageField, gradingKindsForDomain, isRegisteredDomain, offeredGradingKinds, pageSurfaceForDomain, registeredStarters, starterById } from './benchmark/registry.mjs'
@@ -1283,6 +1284,9 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   function snapshot() { applyIdentity(spec); return capture() }
   // Keep only one replacement: internal captures never contain another Undo.
   function savedSnapshot() { return { ...snapshot(), ...(backup ? { undo: structuredClone(backup) } : {}) } }
+  // Save only persisted authored content; the schema omits view state even
+  // inside composite editor drafts and never admits an unknown editor field.
+  function draftIdentity(value) { return persistedDraftIdentity(value, EDITOR_GROUPS) }
   function validateSavedDraft(value) {
     validateDraft(value.spec, value.attachments || {})
     invariant(value.editors === undefined || object(value.editors), 'The saved editor fields are damaged.')
@@ -2705,6 +2709,41 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     changed()
     if (['conditions', 'workflow-config', 'observation-plan', 'seed', 'replicates', 'attempts', 'total', 'timeout', 'duration', 'grading', 'require-review', 'inputs', 'environment', 'decisions', 'name', 'id'].includes(key)) renderConditionFields()
   })
+  // The manual file input and retained-study inspection share one archive reader.
+  // Verify the expected identity before publishing any archive or run context.
+  function clearFrozen() {
+    frozen = null; openedArchive = null; evidence = null; nativeVerification = null
+    field('frozen').textContent = 'No frozen study selected. Open and verify an archive or freeze the draft.'
+    for (const name of ['frozen-details', 'frozen-inspection', 'results', 'readiness']) field(name).replaceChildren()
+    renderNativeVerification(); renderNativePreparationPlan(null); renderNativeControlJobs()
+    syncControls()
+  }
+  async function readArchive(file, ticket, expectedSha256) {
+    // Keep the prior freeze and evidence until every archive check succeeds.
+    invariant(file.size <= ARCHIVE_LIMITS.totalBytes, `Project archives are limited to ${ARCHIVE_LIMITS.totalBytes} bytes.`)
+    const bytes = new Uint8Array(await file.arrayBuffer()); assertCurrent(ticket)
+    const code = await sources(); assertCurrent(ticket)
+    const files = unzipFiles(bytes)
+    const opened = await readExportedProject(files, { sources: code }); assertCurrent(ticket)
+    invariant(!expectedSha256 || opened.project.sha256 === expectedSha256, 'The retained frozen study could not be verified.')
+    const archive = { ...opened, carried: carriedReportInputs(files) }
+    clearFrozen()
+    frozen = opened.project; openedArchive = archive; evidence = null; nativeVerification = null
+    field('results').replaceChildren()
+    renderFrozen(); renderNativeVerification(); onOpen('run'); selectTab('run')
+    status(opened.rebuild.verified
+      ? `Project opened from its archive and verified: ${opened.integrity.checked} files matched its manifest, and this build rebuilds it exactly. Import its run evidence to inspect the results here.`
+      : `Project opened from its archive, read-only: ${opened.integrity.checked} files matched its manifest, but this build rebuilds it differently at ${opened.rebuild.differing.join(', ')}. Its evidence and report can be inspected; it cannot be run here.`)
+  }
+  async function openExported(file, expectedSha256) {
+    invariant(!disposed && !loading && !operation, 'Wait for the current study operation to finish.')
+    let result
+    await operate(async ticket => {
+      try { await readArchive(file, ticket, expectedSha256); result = { ok: true } }
+      catch (error) { result = { ok: false, reason: error.message }; throw error }
+    })
+    return result
+  }
   const onChange = event => {
     if (field('prompt-set-editor').contains(event.target)) return
     if (loading || operation || disposed) return
@@ -2776,26 +2815,8 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
         evidence = next; nativeVerification = receipt; input.value = ''; await renderEvidence(); renderNativeVerification()
         status('Native artifacts verified for consistency; summary recomputed. Native execution, preparation and experimental admission are not established. Export the separate receipt to retain these checks.')
       } else if (input.hasAttribute('data-bench-open-exported')) {
-        // Opening is not freezing. The archive proves itself against its own
-        // manifest, then this build tries to rebuild the frozen project. When it
-        // can, the project is admitted exactly as a local freeze. When it cannot,
-        // because the compiler has moved since the archive was frozen, it is
-        // admitted read-only and the page names the compiled members that differ
-        // rather than refusing with a sentence nobody can act on. Nothing from
-        // the archive is ever executed: only its text is read.
         const file = input.files?.[0]; if (!file) return
-        invariant(file.size <= ARCHIVE_LIMITS.totalBytes, `Project archives are limited to ${ARCHIVE_LIMITS.totalBytes} bytes.`)
-        const bytes = new Uint8Array(await file.arrayBuffer()); assertCurrent(ticket)
-        const code = await sources(); assertCurrent(ticket)
-        const files = unzipFiles(bytes)
-        const opened = await readExportedProject(files, { sources: code }); assertCurrent(ticket)
-        frozen = opened.project; openedArchive = { ...opened, carried: carriedReportInputs(files) }; evidence = null; nativeVerification = null
-        input.value = ''
-        field('results').replaceChildren()
-        renderFrozen(); renderNativeVerification(); onOpen('run'); selectTab('run')
-        status(opened.rebuild.verified
-          ? `Project opened from its archive and verified: ${opened.integrity.checked} files matched its manifest, and this build rebuilds it exactly. Import its run evidence to inspect the results here.`
-          : `Project opened from its archive, read-only: ${opened.integrity.checked} files matched its manifest, but this build rebuilds it differently at ${opened.rebuild.differing.join(', ')}. Its evidence and report can be inspected; it cannot be run here.`)
+        await readArchive(file, ticket); input.value = ''
       } else if (input.hasAttribute('data-bench-import-evidence')) {
         guard(); invariant(frozen, 'Freeze the matching project before importing evidence.')
         const currentProject = frozen
@@ -2874,7 +2895,9 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     finally { if (current(ticket)) { loading = false; renderInformationFields(); syncControls() } }
   }
   render()
-  return { el: root, resourceEl, projectEl, setContext, openDraft, destroy() { if (disposed) return; remember(); disposed = true; epoch++; previewEpoch++; running?.abort(new Error('Research page closed.')); running = null; syncControls(); informationEditor.destroy(); requirementEditor.destroy(); compositionEditor.destroy(); conditionEditor.destroy(); routingEditor.destroy(); compositionGenerator.destroy(); nestingEditor.destroy(); varianceEditor.destroy(); promptSetEditor.destroy(); familyEditor.destroy(); familyOccurrenceEditor.destroy() },
+  return { el: root, resourceEl, projectEl, setContext, openDraft, openExported, clearFrozen, draftIdentity, destroy() { if (disposed) return; remember(); disposed = true; epoch++; previewEpoch++; running?.abort(new Error('Research page closed.')); running = null; syncControls(); informationEditor.destroy(); requirementEditor.destroy(); compositionEditor.destroy(); conditionEditor.destroy(); routingEditor.destroy(); compositionGenerator.destroy(); nestingEditor.destroy(); varianceEditor.destroy(); promptSetEditor.destroy(); familyEditor.destroy(); familyOccurrenceEditor.destroy() },
+    get frozenSha256() { return frozen?.sha256 || null },
+    get frozenOrigin() { return !frozen ? null : openedArchive ? 'archive' : 'draft' },
     get study() { return structuredClone(spec) }, snapshot() { return savedSnapshot() }, selectTab, async importRunEvidence(data) {
       guard(); invariant(frozen && data.projectSha256 === frozen.sha256, 'Open the matching frozen study before loading its results.');
       const ticket = epoch, currentProject = frozen;

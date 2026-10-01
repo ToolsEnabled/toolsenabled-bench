@@ -12,7 +12,7 @@
 // reported rather than thrown: the caller may admit a project it cannot rebuild,
 // as long as it never claims to have verified it.
 import { canonical, invariant, sha256 } from './prompts.mjs'
-import { freezeStudy, runtimeFilesFor, verifyProject } from './study.mjs'
+import { rebuildStudy, runtimeFilesFor, verifyProject } from './study.mjs'
 
 const MANIFEST = 'manifest.json', PROJECT = 'project.json'
 
@@ -70,7 +70,7 @@ export async function readExportedProject(files, { sources = null } = {}) {
   const rebuild = { verified: false, reason: null, differing: [] }
   try { await verifyProject(project); rebuild.verified = true }
   catch (error) {
-    try { rebuild.differing = differingPaths(project, await freezeStudy(project.spec)) }
+    try { rebuild.differing = differingPaths(project, await rebuildStudy(project.spec)) }
     catch (rebuildError) { rebuild.differing = []; rebuild.reason = `${error.message} This runtime cannot recompile it at all: ${rebuildError.message}` }
     if (!rebuild.reason) rebuild.reason = rebuild.differing.length
       ? `This runtime rebuilds the project differently, at ${rebuild.differing.join(', ')}. The archive is intact; it was frozen by a runtime that compiled these fields differently.`

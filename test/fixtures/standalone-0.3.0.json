@@ -1,0 +1,15 @@
+{
+  "format": "benchmark-compatibility-fixture",
+  "version": 1,
+  "sourceCommit": "1a90ca0d0a20532684fcdfa40e7952bde45fd31b",
+  "releaseArchiveSha256": "84b4f5e1a6e8fd3c1cdfd46f9705fcbfd2a1c5453c77dc2606d79cf48944f8e1",
+  "generator": {
+    "name": "ToolsEnabled BenchMark Builder",
+    "version": "0.3.0"
+  },
+  "projectSha256": "da1a7a4008263c2b8d3cd0a9e2f491ab6501d106db6cc409063232d68c10bda1",
+  "archiveSha256": "1b55c96b64a8228d0bdb3c04e9d3347a51f40df9570e9ba8c10ac420a74bce73",
+  "files": 133,
+  "recordedControls": true,
+  "creation": "Unmodified 0.3.0 release modules: freeze/export, then its pinned CLI verify, qualify, run and analyze. No generator substitution."
+}

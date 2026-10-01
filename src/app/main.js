@@ -125,10 +125,10 @@ let current = null,
   runTimer = null,
   saveTimer = null,
   switching = false;
-let inspectedRun = null;
+let inspectedRun = null, openingStudy = false;
 $("#app").innerHTML = `
   <aside class="sidebar"><a class="brand" href="#overview" aria-label="ToolsEnabled BenchMark Builder home"><span class="brand-mark">B<span>·</span></span><span>ToolsEnabled<small>BenchMark Builder</small></span></a>
-    <div class="workspace-label">RESEARCH WORKSPACE <span>v0.2.0</span></div>
+    <div class="workspace-label">RESEARCH WORKSPACE <span>v${__BENCH_VERSION__}</span></div>
     <label class="project-label" for="project-picker">Current project</label><div class="project-control"><select id="project-picker" aria-label="Current project"></select><button id="new-project" class="icon-button" title="New project" aria-label="New project">+</button></div>
     <nav aria-label="Workspace"><button class="nav-link" data-page="overview"><span class="nav-symbol">◫</span> Overview</button><div class="nav-group">DESIGN</div>${steps
       .slice(0, 5)
@@ -148,7 +148,7 @@ $("#app").innerHTML = `
     <div class="sidebar-foot"><button data-page="methods">Methods & limitations <span>↗</span></button><p><span class="local-dot"></span> Local workspace</p></div>
   </aside>
   <div class="main-shell"><header class="topbar"><div class="breadcrumb">WORKBENCH <span>/</span> <span id="crumb">Overview</span></div><div class="top-actions"><span id="save-state" role="status">Saved locally</span><button id="save-project" class="button subtle">Save project</button><button id="export-draft" class="button">Export draft <span>↗</span></button></div></header>
-    <main id="main"><div id="notice" role="alert" hidden></div><section id="overview"></section><section id="editor" hidden><div class="page-heading"><p class="eyebrow" id="step-kicker"></p><h1 id="step-title"></h1><p id="step-description"></p></div><div id="result-context" class="retained-context" hidden></div><div id="builder"></div></section><section id="runs" hidden></section><section id="methods" hidden></section></main>
+    <main id="main"><div id="notice" role="alert" hidden></div><section id="overview"></section><section id="editor" hidden><div class="page-heading"><p class="eyebrow" id="step-kicker"></p><h1 id="step-title"></h1><p id="step-description"></p></div><div id="result-context" class="retained-context" hidden></div><section id="retained-studies" hidden></section><div id="builder"></div></section><section id="runs" hidden></section><section id="methods" hidden></section></main>
     <footer class="page-footer"><span>ToolsEnabled BenchMark Builder</span><span>Specification → frozen study → retained evidence</span></footer>
   </div>`;
 const session = createProjectSession({
@@ -159,6 +159,7 @@ const session = createProjectSession({
       body: JSON.stringify({ draft, revision }),
     }),
   snapshot: () => builder.snapshot(),
+  identify: (draft) => builder.draftIdentity(draft),
   load: (id) => builder.setContext(id, "local", { reload: true }),
   isBusy: () => builder.el.getAttribute("aria-busy") === "true",
   onSaved: () => refreshProjects(),
@@ -248,15 +249,25 @@ function snapshotStats() {
   };
 }
 function renderOverview() {
-  if (!current) return;
+  if (!current) {
+    $("#overview").innerHTML = `<div class="page-heading"><p class="eyebrow">LOCAL WORKSPACE</p><h1>Create your first study</h1><p>Create a project to start authoring. Your workspace is saved when you make changes.</p><button class="button primary" data-action="new">New project</button></div>`;
+    return;
+  }
   const { spec, snippets, tasks, conditions } = snapshotStats();
   $("#overview").innerHTML = `
-  <div class="overview-header"><p class="eyebrow">A REPRODUCIBLE RESEARCH WORKFLOW</p><span class="release-tag">Research preview · 0.2.0</span></div>
+  <div class="overview-header"><p class="eyebrow">A REPRODUCIBLE RESEARCH WORKFLOW</p><span class="release-tag">Research preview · ${__BENCH_VERSION__}</span></div>
   <div class="hero"><div><h1>Build the benchmark.<br><em>Keep the evidence.</em></h1><p>Compose a study from reusable pieces, make the protocol explicit, and take its exact runtime and results with you.</p><div class="hero-actions"><button class="button primary" data-go="library">${snippets ? "Continue authoring" : "Create your first snippet"} <span>→</span></button><button class="button" data-action="open">Open a draft</button></div></div><div class="study-diagram" aria-label="Study stages"><div><span>01</span><strong>Specification</strong><small>Prompts · tasks · protocol</small></div><i>↓</i><div><span>02</span><strong>Frozen study</strong><small>Sources · schedule · identities</small></div><i>↓</i><div><span>03</span><strong>Evidence</strong><small>Journal · analysis · report</small></div></div></div>
   <section class="study-card"><div><p class="eyebrow">CURRENT STUDY</p><h2>${esc(spec.name || "Untitled study")}</h2><p class="study-purpose">${esc(spec.executionPlan?.purpose || "Draft")} <span>·</span> ${esc(spec.domain)}</p></div><div class="study-metrics"><div><strong>${snippets}</strong><span>Snippets & templates</span></div><div><strong>${tasks}</strong><span>Tasks</span></div><div><strong>${conditions}</strong><span>Conditions</span></div></div><button class="text-button" data-go="protocol">Review protocol →</button></section>
   <div class="section-heading"><h2>Explore the workflow</h2><p>Worked examples use recorded controls. They contain no live model measurements.</p></div>
   <div class="example-grid"><button class="example-card" data-example="arithmetic"><span class="example-index">01 / GET STARTED</span><h3>A small, complete study</h3><p>Follow two arithmetic tasks from nested instructions to a frozen schedule and a reproducible report.</p><span class="card-link">Open recorded diagnostic <b>↗</b></span></button><button class="example-card" data-example="records"><span class="example-index">02 / EXTEND THE TOOL</span><h3>Structured record extraction</h3><p>Compare reference and wrong-field responses. This example ships through the portable plugin interface.</p><span class="card-link">Open plugin example <b>↗</b></span></button><button class="example-card" data-action="examples"><span class="example-index">03 / GO FURTHER</span><h3>Bring your research question</h3><p>Explore resource experiments and Lean Bench, or import your own snippets and benchmark specification.</p><span class="card-link">Browse authoring examples <b>↗</b></span></button></div>
   <div class="integrity-note"><span>◇</span><p><strong>Inspect the claim behind the number.</strong> A frozen hash identifies content. Qualification checks an apparatus. A research conclusion still depends on the study design and the evidence.</p><button class="text-button" data-go="methods">Read the methods guide ↗</button></div>`;
+}
+function renderInspectionContext() {
+  if (inspectedRun && (inspectedRun.projectId !== current || inspectedRun.projectSha256 !== builder.frozenSha256)) inspectedRun = null;
+  $("#result-context").hidden = page !== "run" || !inspectedRun;
+  $("#result-context").textContent = inspectedRun
+    ? `Retained study: ${inspectedRun.name} · SHA-256 ${inspectedRun.projectSha256}. The editable draft is separate from this frozen snapshot.`
+    : "";
 }
 async function navigate(next) {
   clearNotice();
@@ -265,11 +276,9 @@ async function navigate(next) {
     !["overview", "runs", "methods", ...steps.map((s) => s[0])].includes(next)
   )
     next = "run";
+  if (!current && steps.some(s => s[0] === next)) next = "overview";
   page = next;
-  $("#result-context").hidden = next !== "run" || !inspectedRun;
-  if (inspectedRun)
-    $("#result-context").textContent =
-      `Retained run: ${inspectedRun.name} · ${inspectedRun.projectSha256.slice(0, 16)}. These results belong to this original frozen study.`;
+  renderInspectionContext();
   builder.el.dataset.workspacePage = next;
   clearTimeout(runTimer);
   const step = steps.find((s) => s[0] === next);
@@ -290,6 +299,8 @@ async function navigate(next) {
     $("#step-description").textContent = step[3];
     builder.selectTab(next);
   }
+  $("#retained-studies").hidden = next !== "run";
+  if (next === "run") await renderStudies();
   if (next === "overview") renderOverview();
   if (next === "runs") await renderRuns();
   if (next === "methods") renderMethods();
@@ -321,6 +332,40 @@ async function loadExample(kind) {
   await saveCurrent();
   await refreshProjects();
   await navigate("run");
+}
+async function renderStudies() {
+  const projectId = current;
+  const studies = (await api("runs")).filter(row => row.projectId === projectId && row.projectSha256);
+  if (current !== projectId || page !== "run") return;
+  $("#retained-studies").innerHTML = studies.length
+    ? `<h2>Retained frozen studies</h2><p>Frozen snapshots from this workspace, including MCP and CLI studies. Inspecting one preserves your editable draft.</p>${studies.map(study => `<article class="run-card" data-study-id="${esc(study.id)}"><h3>${esc(study.name)}</h3><p>${esc(study.status)} · ${esc(new Date(study.createdAt).toLocaleString())}</p><p class="run-identity">SHA-256 ${esc(study.projectSha256)}</p><button class="button" data-run-action="inspect" data-id="${esc(study.id)}">Inspect frozen study</button></article>`).join("")}`
+    : "";
+}
+async function openFrozenStudy(run) {
+  if (openingStudy) throw new Error("Wait for the current study inspection to finish, then inspect another snapshot.");
+  if (builder.el.getAttribute("aria-busy") === "true") throw new Error("Wait for the current study operation to finish.");
+  openingStudy = true;
+  const projectId = current;
+  // Retire a previous Inspect target, but preserve a freeze made by the user.
+  // Archive verification below publishes a replacement only after it succeeds.
+  if (inspectedRun && builder.frozenOrigin === "archive") builder.clearFrozen();
+  inspectedRun = null;
+  renderInspectionContext();
+  try {
+    const response = await fetch(`/api/runs/${run.id}/package`, {
+      headers: { "x-benchmark-token": token },
+    });
+    if (!response.ok) throw new Error("Could not load the frozen package.");
+    const bytes = await response.blob();
+    if (builder.el.getAttribute("aria-busy") === "true") throw new Error("Wait for the current study operation to finish.");
+    if (current !== projectId || run.projectId !== current) throw new Error("The selected project changed while opening the study.");
+    const opened = await builder.openExported(new File([bytes], "frozen-study.zip", { type: "application/zip" }), run.projectSha256);
+    if (!opened?.ok || builder.frozenSha256 !== run.projectSha256) throw new Error(opened?.reason || "The retained frozen study could not be verified.");
+    inspectedRun = run;
+    renderInspectionContext();
+  } finally {
+    openingStudy = false;
+  }
 }
 async function renderRuns() {
   const rows = await api("runs");
@@ -358,27 +403,17 @@ async function runAction(action, id) {
       `${id}-evidence.json`,
     );
   if (action === "package") return download(`runs/${id}/package`, `${id}.zip`);
+  if (action === "inspect") {
+    await openFrozenStudy(await api("runs/" + id));
+    return navigate("run");
+  }
   if (action === "load") {
     const [run, evidence] = await Promise.all([
       api("runs/" + id),
       api("runs/" + id + "/evidence"),
     ]);
     await selectProject(run.projectId);
-    // Open the original frozen package, so later edits never masquerade as this run.
-    const response = await fetch(`/api/runs/${id}/package`, {
-      headers: { "x-benchmark-token": token },
-    });
-    if (!response.ok) throw new Error("Could not load the frozen package.");
-    const input = $("[data-bench-open-exported]", builder.el);
-    const transfer = new DataTransfer();
-    transfer.items.add(
-      new File([await response.blob()], "frozen-study.zip", {
-        type: "application/zip",
-      }),
-    );
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitForBuilder();
+    await openFrozenStudy(run);
     await builder.importRunEvidence(evidence);
     inspectedRun = run;
     await navigate("run");
@@ -393,7 +428,7 @@ async function waitForBuilder() {
 }
 function renderMethods() {
   $("#methods").innerHTML =
-    `<div class="page-heading"><p class="eyebrow">METHODS & LIMITATIONS</p><h1>Make the study inspectable.</h1><p>The tool records a chain of evidence. Each link supports a specific claim.</p></div><div class="method-grid"><article><span>01</span><h2>Specify before collecting</h2><p>Record the task population, conditions, primary denominator, dependence structure, retry policy, and stopping budgets. Freeze the plan before collecting the outcomes it will summarize.</p></article><article><span>02</span><h2>Qualify the apparatus</h2><p>Check reference and wrong-answer controls. Where required, use independently implemented interpreters. An answer key agreeing with itself is an apparatus check, not independent validation.</p></article><article><span>03</span><h2>Preserve the whole attempt</h2><p>Keep failures, refusals, incomplete outputs, retries, and unavailable measurements visible. Replicates repeat a task; they do not automatically create independent sampling units.</p></article><article><span>04</span><h2>Reproduce from artifacts</h2><p>Export the frozen runtime and manifest, retain the journal and raw evidence, then regenerate the analysis and report with that runtime. New stochastic model responses need not reproduce old responses.</p></article></div><section class="method-sheet"><h2>Three execution purposes</h2><table><thead><tr><th>Purpose</th><th>What it supports</th></tr></thead><tbody><tr><td>Recorded diagnostic</td><td>Checks saved responses against the declared scoring rule. It measures no live model.</td></tr><tr><td>Apparatus development</td><td>Exercises unfinished instruments and supported adapters. Outputs retain development status.</td></tr><tr><td>Experiment</td><td>Requires the execution profile and controls declared by the frozen study. A passing gate has its stated scope; it does not certify a research conclusion.</td></tr></tbody></table><h2>Current boundaries</h2><p>Admitted answer-collection profiles support recorded replay and bounded HTTPS requests. Provider CLI and module collection require an appropriate execution contract for counted experiments. Resource experiments use bounded synthetic maps. Native Lean work requires its pinned Python/Docker environment and retains the existing admission limitations.</p><p>The source-bound plugin example demonstrates extensibility and portability. Its authored reference responses establish no external benchmark validity. This preview includes no published empirical findings.</p><h2>Citation and provenance</h2><p>Cite <strong>ToolsEnabled BenchMark Builder, version 0.2.0</strong>, Joshua Pinckard (2026). The repository includes CITATION.cff, its MIT license, extraction provenance, and an AI assistance statement. Each frozen study exports its own citation files and exact source identities. No DOI or peer-review status is claimed.</p><h2>Local by default</h2><p>Projects and run evidence are saved on this computer. External requests occur only when you execute a study configured with an external collector. Executable plugins are installed at build time; opening an archive does not install its code.</p></section>`;
+    `<div class="page-heading"><p class="eyebrow">METHODS & LIMITATIONS</p><h1>Make the study inspectable.</h1><p>The tool records a chain of evidence. Each link supports a specific claim.</p></div><div class="method-grid"><article><span>01</span><h2>Specify before collecting</h2><p>Record the task population, conditions, primary denominator, dependence structure, retry policy, and stopping budgets. Freeze the plan before collecting the outcomes it will summarize.</p></article><article><span>02</span><h2>Qualify the apparatus</h2><p>Check reference and wrong-answer controls. Where required, use independently implemented interpreters. An answer key agreeing with itself is an apparatus check, not independent validation.</p></article><article><span>03</span><h2>Preserve the whole attempt</h2><p>Keep failures, refusals, incomplete outputs, retries, and unavailable measurements visible. Replicates repeat a task; they do not automatically create independent sampling units.</p></article><article><span>04</span><h2>Reproduce from artifacts</h2><p>Export the frozen runtime and manifest, retain the journal and raw evidence, then regenerate the analysis and report with that runtime. New stochastic model responses need not reproduce old responses.</p></article></div><section class="method-sheet"><h2>Three execution purposes</h2><table><thead><tr><th>Purpose</th><th>What it supports</th></tr></thead><tbody><tr><td>Recorded diagnostic</td><td>Checks saved responses against the declared scoring rule. It measures no live model.</td></tr><tr><td>Apparatus development</td><td>Exercises unfinished instruments and supported adapters. Outputs retain development status.</td></tr><tr><td>Experiment</td><td>Requires the execution profile and controls declared by the frozen study. A passing gate has its stated scope; it does not certify a research conclusion.</td></tr></tbody></table><h2>Current boundaries</h2><p>Admitted answer-collection profiles support recorded replay and bounded HTTPS requests. Provider CLI and module collection require an appropriate execution contract for counted experiments. Resource experiments use bounded synthetic maps. Native Lean work requires its pinned Python/Docker environment and retains the existing admission limitations.</p><p>The source-bound plugin example demonstrates extensibility and portability. Its authored reference responses establish no external benchmark validity. This preview includes no published empirical findings.</p><h2>Citation and provenance</h2><p>Cite <strong>ToolsEnabled BenchMark Builder, version ${__BENCH_VERSION__}</strong>, Joshua Pinckard (2026). The repository includes CITATION.cff, its MIT license, extraction provenance, and an AI assistance statement. Each frozen study exports its own citation files and exact source identities. No DOI or peer-review status is claimed.</p><h2>Local by default</h2><p>Projects and run evidence are saved on this computer. External requests occur only when you execute a study configured with an external collector. Executable plugins are installed at build time; opening an archive does not install its code.</p></section>`;
 }
 for (const b of document.querySelectorAll("[data-page]"))
   b.addEventListener("click", () => guarded(() => navigate(b.dataset.page)));
@@ -405,6 +440,7 @@ $("#main").addEventListener("click", (e) => {
     if (button.dataset.example) return loadExample(button.dataset.example);
     if (button.dataset.runAction)
       return runAction(button.dataset.runAction, button.dataset.id);
+    if (button.dataset.action === "new") return newProject();
     if (button.dataset.action === "open") {
       await navigate("library");
       $("[data-bench-import]", builder.el).click();
@@ -457,6 +493,12 @@ function scheduleAutosave() {
     1200,
   );
 }
+let editCheckPending = false;
+function checkPendingEdit() {
+  if (!editCheckPending || switching || builder.el.getAttribute("aria-busy") === "true") return;
+  editCheckPending = false;
+  if (session.markEdited()) scheduleAutosave();
+}
 for (const event of ["input", "change", "click"])
   builder.el.addEventListener(event, (e) => {
     if (
@@ -469,9 +511,13 @@ for (const event of ["input", "change", "click"])
       inspectedRun = null;
       $("#result-context").hidden = true;
     }
-    session.markEdited();
-    scheduleAutosave();
-  });
+    // Capture also sees editors that stop propagation. Yield through the full
+    // event dispatch before comparing; even a resolved await can resume before
+    // a target listener. Busy operations retain the check until aria-busy clears,
+    // regardless of how long an import or lazy chunk takes to finish.
+    editCheckPending = true;
+    setTimeout(() => void guarded(checkPendingEdit), 0);
+  }, { capture: true });
 function syncHostControls() {
   const busy = switching || builder.el.getAttribute("aria-busy") === "true";
   builder.el.inert = switching;
@@ -480,7 +526,10 @@ function syncHostControls() {
   $("#new-project").disabled = busy;
   $("#project-picker").disabled = busy;
 }
-new MutationObserver(syncHostControls).observe(builder.el, {
+new MutationObserver(() => {
+  syncHostControls();
+  void guarded(checkPendingEdit);
+}).observe(builder.el, {
   attributes: true,
   attributeFilter: ["aria-busy"],
 });
@@ -492,14 +541,7 @@ window.addEventListener("beforeunload", (event) => {
 });
 await guarded(async () => {
   await refreshProjects();
-  if (!projects.length)
-    projects = [
-      await api("projects", {
-        method: "POST",
-        body: JSON.stringify({ title: "Untitled study" }),
-      }),
-    ];
-  await selectProject(projects[0].id);
+  if (projects.length) await selectProject(projects[0].id);
   await refreshProjects();
   await navigate("overview");
 });

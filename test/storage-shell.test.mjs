@@ -128,6 +128,7 @@ test("same-project reload saves pending edits before reopening and a failed swit
       return { revision: revision + 1 };
     },
     snapshot: () => structuredClone(editable),
+    identify: JSON.stringify,
     load: async (id) => {
       editable = await session.store.read(id);
       return { ok: true };
@@ -167,6 +168,7 @@ test("an older save response cannot mark newer edits saved and a conflict retain
       return { revision: ++revision };
     },
     snapshot: () => structuredClone(editable),
+    identify: JSON.stringify,
     load: async (id) => {
       editable = await session.store.read(id);
       return { ok: true };
@@ -225,4 +227,66 @@ test("a queued successful retry clears an earlier failed save", async () => {
   await second;
   assert.equal(session.hasUnsavedChanges, false);
   assert.equal(session.state.label, "Saved locally");
+});
+
+test("reverting while a save is in flight persists the revert after the queued edit", async t => {
+  const { createProjectSession } = await import('../src/app/project-session.js');
+  let editable, release, started;
+  const gate = new Promise(resolve => { release = resolve; });
+  const writing = new Promise(resolve => { started = resolve; });
+  t.after(release);
+  const record = { revision: 1, draft: { text: 'Original' } };
+  const writes = [];
+  const session = createProjectSession({
+    read: async () => structuredClone(record),
+    write: async (id, value, revision) => {
+      writes.push(structuredClone(value)); started(); await gate;
+      assert.equal(record.revision, revision);
+      record.draft = structuredClone(value);
+      return { revision: ++record.revision };
+    },
+    snapshot: () => structuredClone(editable), identify: JSON.stringify,
+    load: async id => { editable = await session.store.read(id); },
+  });
+  await session.select('A');
+  editable.text = 'Typo'; session.markEdited();
+  const first = session.saveCurrent(); await writing;
+  editable.text = 'Original';
+  const needsSave = session.markEdited();
+  // This is the shell's autosave decision, made while I1 has not completed.
+  const reverted = needsSave ? session.saveCurrent() : null;
+  release(); await first; if (reverted) await reverted;
+  assert.equal(needsSave, true, 'the queued identity, not the last confirmed one, determines whether this edit needs saving');
+  assert.equal(record.draft.text, 'Original');
+  assert.deepEqual(writes.map(row => row.text), ['Typo', 'Original']);
+  assert.equal(session.hasUnsavedChanges, false);
+  await session.select('A');
+  assert.equal(editable.text, 'Original', 'the revert must survive reload');
+});
+
+test("a conflict followed by reverting and saving must not claim stale content is saved", async () => {
+  const { createProjectSession } = await import('../src/app/project-session.js');
+  let editable, writes = 0;
+  const record = { revision: 1, draft: { text: 'A' } };
+  const session = createProjectSession({
+    read: async () => structuredClone(record),
+    write: async (id, value, revision) => {
+      writes++;
+      if (record.revision !== revision) throw new Error('Saved in another window. Download your draft, then reopen the project.');
+      record.draft = structuredClone(value);
+      return { revision: ++record.revision };
+    },
+    snapshot: () => structuredClone(editable), identify: JSON.stringify,
+    load: async id => { editable = await session.store.read(id); },
+  });
+  await session.select('A');
+  record.revision = 2; record.draft = { text: 'Other window' };
+  editable.text = 'C'; session.markEdited();
+  await assert.rejects(session.saveCurrent(), /another window/);
+  editable.text = 'A'; session.markEdited();
+  await assert.rejects(session.saveCurrent(), /another window/);
+  assert.equal(writes, 2, 'cached identity cannot skip the revision check after a conflict');
+  assert.equal(session.state.label, 'Not saved');
+  assert.equal(session.hasUnsavedChanges, true);
+  assert.equal(record.draft.text, 'Other window');
 });
