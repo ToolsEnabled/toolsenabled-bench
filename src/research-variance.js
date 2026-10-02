@@ -317,7 +317,7 @@ export function createVarianceEditor({ onDraft, onSnippet, onPreviewRun, onSaveR
     if (context !== next.contextKey) { pickerFor = null; pickerSearch = ''; markingId = ''; snippet = null; markLabel = ''; page = 0; context = next.contextKey }
     // The older per-source studies ride along untouched; the run is ours.
     state = next.state?.studies?.length ? structuredClone(next.state) : { ...emptyVarianceState(), ...(next.state ? structuredClone(next.state) : {}) }
-    if (!Array.isArray(state.studies)) state.studies = emptyVarianceState().studies
+    if (!Array.isArray(state.studies) || !state.studies.length) state.studies = emptyVarianceState().studies
     if (!state.studies.some(item => item.id === state.active)) state.active = state.studies[0].id
     state.run = normalize(state.run); state.review = state.review && Array.isArray(state.review.rows) ? state.review : null
     if (active) render()

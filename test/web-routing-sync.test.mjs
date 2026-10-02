@@ -1,0 +1,84 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { startServer } from '../server/main.mjs';
+import { genericStarter, newExperimentDraft } from '../src/benchmark/starters.mjs';
+
+test('a tree slot edit retains rows and fields already saved by the routing rules editor', { timeout: 40000 }, async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bench-routing-sync-'));
+  const app = await startServer({ port: 0, dataDir });
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--no-zygote', '--disable-dev-shm-usage'] });
+  t.after(async () => { await browser.close(); await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const spec = newExperimentDraft(genericStarter(), { purpose: 'recorded-diagnostic', initializePopulation: true });
+  const project = await app.projects.create('Routing editors');
+  await app.projects.save(project.id, { spec, attachments: {} }, project.revision);
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(app.origin); await page.locator('[data-page="corpus"]').click();
+  await page.locator('[data-bench-routing-fold] > summary').click();
+  await page.locator('[data-routing-add-row]').click();
+  await page.locator('[data-routing-add-field]').click();
+  await page.locator('[data-routing-field="0"]').fill('kept-field');
+  await page.locator('[data-routing-field="0"]').press('Tab');
+  await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved locally');
+  const before = JSON.parse((await app.projects.read(project.id)).draft.editors['data-bench-routing']);
+  assert.equal(before.rows.length, 2); assert.deepEqual(before.fields, ['kept-field']);
+  await page.locator('[data-bench-tree-fold] > summary').click();
+  const slot = page.locator('[data-bench-tree-editor] select[data-routing-use]').last();
+  const previous = await slot.inputValue();
+  const next = await slot.locator('option').evaluateAll((options, previous) => options.find(option => option.value !== previous && option.value.startsWith('snippet:'))?.value ?? '', previous);
+  assert.notEqual(next, previous);
+  const saved = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + project.id) && response.ok());
+  await slot.selectOption(next); await saved;
+  await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved locally');
+  const after = JSON.parse((await app.projects.read(project.id)).draft.editors['data-bench-routing']);
+  assert.deepEqual(after.rows, before.rows, 'tree editing must keep the saved rows');
+  assert.deepEqual(after.fields, before.fields, 'tree editing must keep the saved fields');
+  assert.notDeepEqual(after.compositions, before.compositions, 'the tree change must also be saved');
+  await page.reload(); await page.locator('[data-page="corpus"]').click();
+  assert.deepEqual(JSON.parse(await page.locator('[data-bench-routing]').inputValue()), after);
+  assert.deepEqual(errors, []);
+});
+
+for (const order of [['tree', 'rules'], ['rules', 'tree']]) test(`advanced routing JSON survives ${order.join(' then ')} edits and reload`, { timeout: 40000 }, async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bench-routing-json-'));
+  const app = await startServer({ port: 0, dataDir });
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--no-zygote', '--disable-dev-shm-usage'] });
+  t.after(async () => { await browser.close(); await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const spec = newExperimentDraft(genericStarter(), { purpose: 'recorded-diagnostic', initializePopulation: true });
+  const project = await app.projects.create('Routing JSON');
+  await app.projects.save(project.id, { spec, attachments: {} }, project.revision);
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(app.origin); await page.locator('[data-page="corpus"]').click();
+  await page.locator('[data-bench-routing-fold] > summary').click();
+  await page.getByText('Advanced: this routing as JSON', { exact: true }).click();
+  const routing = page.locator('[data-bench-routing]');
+  const authored = JSON.parse(await routing.inputValue());
+  authored.fields.push('json-kept');
+  const row = { id: 'json-row', values: { 'json-kept': 'authored value' } }; authored.rows.push(row);
+  const saved = () => page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + project.id) && response.ok());
+  let save = saved(); await routing.fill(JSON.stringify(authored, null, 2)); await routing.press('Tab'); await save;
+  await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved locally');
+  for (const edit of order) {
+    save = saved();
+    if (edit === 'tree') {
+      await page.locator('[data-bench-tree-fold] > summary').click();
+      const slot = page.locator('[data-bench-tree-editor] select[data-routing-use]').last();
+      const previous = await slot.inputValue();
+      const next = await slot.locator('option').evaluateAll((options, previous) => options.find(option => option.value !== previous && option.value.startsWith('snippet:'))?.value ?? '', previous);
+      assert.notEqual(next, previous); await slot.selectOption(next);
+    } else await page.locator('[data-routing-add-row]').click();
+    await save; await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved locally');
+    const disk = JSON.parse((await app.projects.read(project.id)).draft.editors['data-bench-routing']);
+    assert.ok(disk.fields.includes('json-kept'), `${edit} must preserve the JSON field`);
+    assert.deepEqual(disk.rows.find(item => item.id === row.id), row, `${edit} must preserve the JSON row and its value`);
+  }
+  const disk = (await app.projects.read(project.id)).draft.editors['data-bench-routing'];
+  assert.equal(JSON.parse(disk).rows.length, authored.rows.length + 1);
+  await page.reload(); await page.locator('[data-page="corpus"]').click();
+  assert.deepEqual(JSON.parse(await routing.inputValue()), JSON.parse(disk)); assert.deepEqual(errors, []);
+});

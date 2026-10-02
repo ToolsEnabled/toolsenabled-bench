@@ -28,7 +28,7 @@ export { STUDY_VERSION, SUPPORTED_SCHEMA_VERSIONS, modernSchema, CORE_RUNTIME_FI
 // verbatim into every export and runs with no application beside it;
 // tools/test/research-benchmark-generator-identity.test.mjs holds the constant
 // equal to the shipped version so the two cannot drift apart.
-export const GENERATOR = Object.freeze({ name: 'ToolsEnabled BenchMark Builder', version: '0.3.1' })
+export const GENERATOR = Object.freeze({ name: 'ToolsEnabled BenchMark Builder', version: '0.3.2' })
 // Historical manifests retain their actual source inventory. Adding a new
 // compiler module must not add a missing file to an already frozen project.
 export function runtimeFilesFor(value) {
@@ -58,7 +58,7 @@ export function runtimeFilesFor(value) {
 // not his, so the two layers stay apart in the citation files and in the report.
 const TEMPLATE_TITLE = 'ToolsEnabled BenchMark Builder Research Template'
 const TEMPLATE_VERSION = '2.2.0'
-const TEMPLATE_GENERATOR = Object.freeze({ name: 'ToolsEnabled BenchMark Builder', version: '0.3.1' })
+const TEMPLATE_GENERATOR = Object.freeze({ name: 'ToolsEnabled BenchMark Builder', version: '0.3.2' })
 // docs/ATTRIBUTION.md, "## The academic form", verbatim: the blockquote markers are stripped
 // and the wrapped lines joined, and nothing else is changed.
 const TEMPLATE_AI_STATEMENT = 'Joshua Pinckard conceived the project, defined its objectives and requirements, directed the autonomous agent workflows, selected and evaluated outputs, and assumes responsibility for the research methodology and conclusions. AI agents generated substantial portions of the implementation and written drafts.'

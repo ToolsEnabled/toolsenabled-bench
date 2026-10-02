@@ -30,6 +30,11 @@ async function api(path, options = {}) {
     const error = await response.json();
     throw new Error(error.error || "Request failed.");
   }
+  if (path === "projects" && (!options.method || options.method === "GET")) {
+    const warning = response.headers.get("X-Benchmark-Project-Warning");
+    $("#project-warning").textContent = warning || "";
+    $("#project-warning").hidden = !warning;
+  }
   return response.json();
 }
 async function download(path, name) {
@@ -148,7 +153,7 @@ $("#app").innerHTML = `
     <div class="sidebar-foot"><button data-page="methods">Methods & limitations <span>↗</span></button><p><span class="local-dot"></span> Local workspace</p></div>
   </aside>
   <div class="main-shell"><header class="topbar"><div class="breadcrumb">WORKBENCH <span>/</span> <span id="crumb">Overview</span></div><div class="top-actions"><span id="save-state" role="status">Saved locally</span><button id="save-project" class="button subtle">Save project</button><button id="export-draft" class="button">Export draft <span>↗</span></button></div></header>
-    <main id="main"><div id="notice" role="alert" hidden></div><section id="overview"></section><section id="editor" hidden><div class="page-heading"><p class="eyebrow" id="step-kicker"></p><h1 id="step-title"></h1><p id="step-description"></p></div><div id="result-context" class="retained-context" hidden></div><section id="retained-studies" hidden></section><div id="builder"></div></section><section id="runs" hidden></section><section id="methods" hidden></section></main>
+    <main id="main"><div id="notice" role="alert" hidden></div><div id="project-warning" role="alert" hidden></div><section id="overview"></section><section id="editor" hidden><div class="page-heading"><p class="eyebrow" id="step-kicker"></p><h1 id="step-title"></h1><p id="step-description"></p></div><div id="result-context" class="retained-context" hidden></div><section id="retained-studies" hidden></section><div id="builder"></div></section><section id="runs" hidden></section><section id="methods" hidden></section></main>
     <footer class="page-footer"><span>ToolsEnabled BenchMark Builder</span><span>Specification → frozen study → retained evidence</span></footer>
   </div>`;
 const session = createProjectSession({
@@ -178,8 +183,8 @@ function notify(error) {
 function clearNotice() {
   $("#notice").hidden = true;
 }
-async function guarded(action) {
-  clearNotice();
+async function guarded(action, { background = false } = {}) {
+  if (!background) clearNotice();
   try {
     return await action();
   } catch (error) {
@@ -224,7 +229,13 @@ async function saveCurrent() {
 async function selectProject(id) {
   clearTimeout(saveTimer);
   saveTimer = null;
-  await session.select(id);
+  try {
+    await session.select(id);
+  } catch (error) {
+    $("#project-picker").value = current || "";
+    renderOverview();
+    throw error;
+  }
   inspectedRun = null;
   $("#project-picker").value = id;
   renderOverview();
@@ -263,7 +274,7 @@ function renderOverview() {
   <div class="integrity-note"><span>◇</span><p><strong>Inspect the claim behind the number.</strong> A frozen hash identifies content. Qualification checks an apparatus. A research conclusion still depends on the study design and the evidence.</p><button class="text-button" data-go="methods">Read the methods guide ↗</button></div>`;
 }
 function renderInspectionContext() {
-  if (inspectedRun && (inspectedRun.projectId !== current || inspectedRun.projectSha256 !== builder.frozenSha256)) inspectedRun = null;
+  if (inspectedRun && (builder.frozenOrigin !== "inspect" || inspectedRun.projectId !== current || inspectedRun.projectSha256 !== builder.frozenSha256)) inspectedRun = null;
   $("#result-context").hidden = page !== "run" || !inspectedRun;
   $("#result-context").textContent = inspectedRun
     ? `Retained study: ${inspectedRun.name} · SHA-256 ${inspectedRun.projectSha256}. The editable draft is separate from this frozen snapshot.`
@@ -348,7 +359,8 @@ async function openFrozenStudy(run) {
   const projectId = current;
   // Retire a previous Inspect target, but preserve a freeze made by the user.
   // Archive verification below publishes a replacement only after it succeeds.
-  if (inspectedRun && builder.frozenOrigin === "archive") builder.clearFrozen();
+  if (builder.frozenOrigin === "inspect") builder.clearFrozen();
+  const frozenGeneration = builder.frozenGeneration;
   inspectedRun = null;
   renderInspectionContext();
   try {
@@ -359,7 +371,7 @@ async function openFrozenStudy(run) {
     const bytes = await response.blob();
     if (builder.el.getAttribute("aria-busy") === "true") throw new Error("Wait for the current study operation to finish.");
     if (current !== projectId || run.projectId !== current) throw new Error("The selected project changed while opening the study.");
-    const opened = await builder.openExported(new File([bytes], "frozen-study.zip", { type: "application/zip" }), run.projectSha256);
+    const opened = await builder.openExported(new File([bytes], "frozen-study.zip", { type: "application/zip" }), run.projectSha256, frozenGeneration);
     if (!opened?.ok || builder.frozenSha256 !== run.projectSha256) throw new Error(opened?.reason || "The retained frozen study could not be verified.");
     inspectedRun = run;
     renderInspectionContext();
@@ -385,7 +397,7 @@ async function renderRuns() {
       ].includes(r.status),
     )
   )
-    runTimer = setTimeout(() => guarded(renderRuns), 1500);
+    runTimer = setTimeout(() => guarded(renderRuns, { background: true }), 1500);
 }
 async function runAction(action, id) {
   if (action === "cancel" || action === "resume") {
@@ -418,13 +430,6 @@ async function runAction(action, id) {
     inspectedRun = run;
     await navigate("run");
   }
-}
-async function waitForBuilder() {
-  for (let i = 0; i < 300; i++) {
-    if (builder.el.getAttribute("aria-busy") !== "true") return;
-    await new Promise((r) => setTimeout(r, 30));
-  }
-  throw new Error("The study is still opening. Try again when it finishes.");
 }
 function renderMethods() {
   $("#methods").innerHTML =
@@ -459,7 +464,7 @@ $("#project-picker").addEventListener("change", () =>
       await selectProject($("#project-picker").value);
       await navigate("overview");
     } catch (error) {
-      $("#project-picker").value = current;
+      await navigate("overview");
       throw error;
     }
   }),
@@ -489,7 +494,7 @@ function scheduleAutosave() {
           return;
         }
         await saveCurrent();
-      }),
+      }, { background: true }),
     1200,
   );
 }
@@ -497,6 +502,7 @@ let editCheckPending = false;
 function checkPendingEdit() {
   if (!editCheckPending || switching || builder.el.getAttribute("aria-busy") === "true") return;
   editCheckPending = false;
+  renderInspectionContext();
   if (session.markEdited()) scheduleAutosave();
 }
 for (const event of ["input", "change", "click"])
@@ -507,16 +513,12 @@ for (const event of ["input", "change", "click"])
       e.target.closest("[data-bench-tab]")
     )
       return;
-    if (event === "input" || e.target.closest("[data-bench-freeze]")) {
-      inspectedRun = null;
-      $("#result-context").hidden = true;
-    }
     // Capture also sees editors that stop propagation. Yield through the full
     // event dispatch before comparing; even a resolved await can resume before
     // a target listener. Busy operations retain the check until aria-busy clears,
     // regardless of how long an import or lazy chunk takes to finish.
     editCheckPending = true;
-    setTimeout(() => void guarded(checkPendingEdit), 0);
+    setTimeout(() => void guarded(checkPendingEdit, { background: true }), 0);
   }, { capture: true });
 function syncHostControls() {
   const busy = switching || builder.el.getAttribute("aria-busy") === "true";
@@ -528,7 +530,7 @@ function syncHostControls() {
 }
 new MutationObserver(() => {
   syncHostControls();
-  void guarded(checkPendingEdit);
+  void guarded(checkPendingEdit, { background: true });
 }).observe(builder.el, {
   attributes: true,
   attributeFilter: ["aria-busy"],
@@ -541,7 +543,13 @@ window.addEventListener("beforeunload", (event) => {
 });
 await guarded(async () => {
   await refreshProjects();
-  if (projects.length) await selectProject(projects[0].id);
+  let openError;
+  if (projects.length) {
+    try { await selectProject(projects[0].id); }
+    catch (error) { openError = error; }
+  }
   await refreshProjects();
+  $("#project-picker").value = current || "";
   await navigate("overview");
+  if (openError) throw openError;
 });

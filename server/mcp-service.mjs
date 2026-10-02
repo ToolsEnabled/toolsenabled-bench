@@ -1,3 +1,4 @@
+import { validateRetainedDraft, RetainedEditorError } from '../src/research-retained-editors.mjs';
 import { mkdir, readFile, readdir, lstat, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { resolve, dirname, join, sep } from 'node:path';
@@ -162,6 +163,8 @@ export async function createBenchService({ dataDir = process.env.BENCHMARK_DATA_
         const generated = await materializeCorpus(draft.spec); draft.spec.tasks = generated.tasks;
       }
       if (!draft?.spec || !Array.isArray(draft.spec.catalog) || !Array.isArray(draft.spec.tasks)) refuse('INVALID_INPUT', 'A draft needs a specification with catalog and tasks.');
+      try { validateRetainedDraft(draft); }
+      catch (error) { if (error instanceof RetainedEditorError) refuse('INVALID_INPUT', error.message); throw error; }
       for (const key of Object.keys(draft.attachments || {})) if (!safePath(key)) refuse('UNSAFE_PATH', 'Attachment paths must stay inside the exported study.');
       if (!record) { await checkedPath(root, 'projects'); record = await projects.create(draft.spec.name); }
       const result = await save(record, draft);

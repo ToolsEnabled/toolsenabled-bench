@@ -1,0 +1,28 @@
+{
+  "name": "toolsenabled-bench",
+  "version": "0.3.2",
+  "displayName": "ToolsEnabled Bench",
+  "description": "Compose local benchmark studies, freeze their exact runtime and inspect retained evidence. Execution requires the declared study identity.",
+  "author": {
+    "name": "ToolsEnabled, Inc.",
+    "email": "support@toolsenabled.ai",
+    "url": "https://toolsenabled.ai"
+  },
+  "homepage": "https://toolsenabled.ai",
+  "repository": "https://github.com/ToolsEnabled/toolsenabled-bench",
+  "license": "MIT",
+  "keywords": [
+    "benchmarks",
+    "research",
+    "recorded-controls",
+    "local"
+  ],
+  "userConfig": {
+    "data_directory": {
+      "type": "directory",
+      "title": "Private Bench data folder",
+      "description": "Absolute path to a private state folder outside the whole plugin cache and installation. Use a separate folder for each simultaneous client; reuse it across plugin upgrades.",
+      "required": true
+    }
+  }
+}

@@ -39,6 +39,29 @@ export function createRoutingDraft(task) {
   }
 }
 
+// Build a safe view of unfinished authoring state without rewriting its JSON.
+// Semantic validation still belongs to explicit task generation.
+export function routingEditorDraft(value) {
+  const need = (condition, message) => invariant(condition, `Advanced routing JSON: ${message} Edit the JSON to continue; your text is preserved.`)
+  need(object(value), 'use an object with fields, compositions, decisions, rules and rows lists.')
+  const list = (value, label, item = value => value) => {
+    need(value === undefined || Array.isArray(value), `${label} must be a list (use [] for an empty list).`)
+    return (value || []).map((entry, index) => item(entry, `${label} item ${index + 1}`))
+  }
+  const record = (entry, label) => { need(object(entry), `${label} must be an object.`); return entry }
+  const rules = (value, label) => list(value, label, (entry, where) => ({ ...record(entry, where), tests: list(entry.tests, `${where} tests`, record) }))
+  return { ...value,
+    fields: list(value.fields, 'fields', (entry, label) => { need(typeof entry === 'string', `${label} must be text.`); return entry }),
+    compositions: list(value.compositions, 'compositions', (entry, label) => {
+      record(entry, label); need(entry.name === undefined || typeof entry.name === 'string', `${label} name must be text.`)
+      return { name: '', ...entry }
+    }),
+    decisions: list(value.decisions, 'decisions', (entry, label) => ({ ...record(entry, label), rules: rules(entry.rules, `${label} rules`) })),
+    rules: rules(value.rules, 'rules'),
+    rows: list(value.rows, 'rows', (entry, label) => ({ values: {}, ...record(entry, label) })),
+  }
+}
+
 /* PROMPT C. WHAT A RUNG CHOOSES, IN ONE SHAPE.
  * Either a composition to use or another set of rules to ask, exactly as a
  * place in a composition holds either a snippet or another composition. A bare

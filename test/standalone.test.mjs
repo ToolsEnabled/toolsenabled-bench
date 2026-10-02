@@ -262,3 +262,13 @@ test("historical citations retain the inherited template; freezing does not clai
     /fixes the analysis before the data exist/,
   );
 });
+
+
+test("missing project reads give a repairable message without a local path", async (t) => {
+  const { request, dataDir } = await fixture(t);
+  const project = (await request("projects", { title: "Removed locally" })).value;
+  await rm(join(dataDir, "projects", project.id + ".json"));
+  const missing = await request("projects/" + project.id);
+  assert.equal(missing.status, 404);
+  assert.deepEqual(missing.value, { error: "Project file missing or unreadable." });
+});

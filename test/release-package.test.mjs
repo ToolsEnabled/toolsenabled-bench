@@ -20,15 +20,23 @@ async function fixture(t) {
     await writeFile(join(root, name), value);
   };
   for (const name of [
-    'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
+    'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md', 'release-config.json',
     'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md', 'index.html',
     'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/check-benchmark-core-independent.mjs',
     'tools/release.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-config.mjs',
+    'tools/package-mcpb.mjs', 'tools/mcpb-clock.cjs', 'tools/registry-draft.mjs',
+    'tools/mcpb-build/package.json', 'tools/mcpb-build/package-lock.json',
+    'skills/toolsenabled-bench/SKILL.md', 'server/mcp-plugin.mjs', 'server/plugin-state.mjs',
     'server/mcp.mjs', 'server/mcp-service.mjs', 'server/local-origin.mjs', 'server/data-root-lease.mjs', 'server/mcp-sdk.mjs', 'docs/MCP-LICENSES.md', 'server/main.mjs', 'server/runs.mjs', 'server/store.mjs',
     'src/benchmark/study.mjs', 'src/benchmark/cli.mjs', 'src/benchmark/plugins.mjs',
     'src/app/main.js', 'dist/index.html', 'dist/assets/app.js',
     'plugins/example.mjs', 'docs/ARCHITECTURE.md',
   ]) await put(name, `Fixture: ${name}\n`);
+  for (const name of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'manifest.json', '.mcp.json']) {
+    const value = JSON.parse(await readFile(join(repo, name), 'utf8'));
+    if (value.version) value.version = '0.2.0';
+    await put(name, JSON.stringify(value));
+  }
   await put('plugins.json', '["./plugins/example.mjs"]\n');
   const pluginMetadata = {
     format: 'benchmark-plugin-package', version: 1,
@@ -81,6 +89,7 @@ test('runtime archive preserves binary files, is deterministic across mtimes, an
     'node_modules/example/index.js', 'tools/test/fixtures/fleet-native.mjs',
     'test/development.test.mjs', 'release/previous.zip', 'src/.private.json',
     'plugins/.env', 'plugins/node_modules/dependency/index.js',
+    'server.json',
   ]) await put(name, 'not part of the distribution');
   const first = await buildRelease({ root });
   const bytes = await readFile(first.archivePath), files = entries(bytes);
@@ -90,7 +99,10 @@ test('runtime archive preserves binary files, is deterministic across mtimes, an
   assert.ok(files.has(prefix + 'src/benchmark/cli.mjs'));
   assert.ok(files.has(prefix + 'dist/assets/app.js'));
   assert.ok(files.has(prefix + 'tools/plugin-bundle.mjs'));
-  assert.ok([...files.keys()].every(name => !/(?:^|\/)\.|node_modules|tools\/test|\/test\/|\/release\//.test(name)));
+  const publicDotFiles = new Set([prefix + '.claude-plugin/plugin.json', prefix + '.codex-plugin/plugin.json', prefix + '.mcp.json']);
+  assert.ok([...files.keys()].every(name => publicDotFiles.has(name) || !/(?:^|\/)\.|node_modules|tools\/test|\/test\/|\/release\//.test(name)));
+  for (const name of ['.claude-plugin/plugin.json', '.mcp.json', 'manifest.json', 'skills/toolsenabled-bench/SKILL.md', 'server/mcp-plugin.mjs']) assert.ok(files.has(prefix + name), name);
+  assert.ok(!files.has(prefix + 'server.json'), 'Registry metadata stays outside the plugin payload');
   const readme = files.get(prefix + 'RELEASE.md').toString();
   assert.match(readme, /node server\/main.mjs/);
   assert.match(readme, /runtime distribution omits development test suites/);
@@ -126,6 +138,18 @@ test('packaging rejects symlinks, incomplete builds, and inconsistent release ve
   await put('dist/assets/app.js', 'fixture');
   await put('package-lock.json', JSON.stringify({ version: '0.1.0', packages: { '': { version: '0.1.0' } } }));
   await assert.rejects(buildRelease({ root }), /Package and lockfile versions differ/);
+});
+
+test('packaging refuses mismatched Claude identities and indirect launch commands', async t => {
+  const { root, put } = await fixture(t);
+  const plugin = JSON.parse(await readFile(join(root, '.claude-plugin/plugin.json'), 'utf8'));
+  await put('.claude-plugin/plugin.json', JSON.stringify({ ...plugin, version: '9.0.0' }));
+  await assert.rejects(buildRelease({ root }), /Claude package identity/);
+  await put('.claude-plugin/plugin.json', JSON.stringify(plugin));
+  const mcp = JSON.parse(await readFile(join(root, '.mcp.json'), 'utf8'));
+  mcp.mcpServers.bench.command = 'npm'; mcp.mcpServers.bench.args = ['run', 'mcp'];
+  await put('.mcp.json', JSON.stringify(mcp));
+  await assert.rejects(buildRelease({ root }), /launch Node directly/);
 });
 
 test('ZIP paths cannot escape extraction or collide on case-insensitive filesystems', () => {
@@ -200,6 +224,31 @@ test('runtime archive includes the pinned MCP closure and registration helper', 
   const built = await buildRelease({ root }); const files = entries(await readFile(built.archivePath));
   for (const name of ['server/mcp.mjs', 'server/mcp-sdk.mjs', 'server/mcp-sdk.json', 'server/mcp-service.mjs', 'server/local-origin.mjs', 'tools/mcp-config.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-bundle.mjs', 'docs/MCP-LICENSES.md']) assert.ok(files.has(prefix + name), name);
   assert.match(files.get(prefix + 'RELEASE.md').toString(), /node server\/mcp.mjs/);
+});
+test('runtime has no install inputs and repacks identically without the development lock', async t => {
+  const { root } = await fixture(t);
+  const sourcePackage = await readFile(join(root, 'package.json'));
+  const sourceLock = await readFile(join(root, 'package-lock.json'));
+  const built = await buildRelease({ root });
+  const bytes = await readFile(built.archivePath), files = entries(bytes);
+  const pkg = JSON.parse(files.get(prefix + 'package.json'));
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'scripts'])
+    assert.equal(pkg[field], undefined, field);
+  assert.ok(![...files.keys()].some(name => /(?:package-lock|npm-shrinkwrap)\.json$/.test(name)));
+  assert.ok(![...files.keys()].some(name => name.includes('/tools/mcpb-build/')));
+  assert.equal(pkg.benchRuntime.sdkVersion, '1.26.0');
+  assert.equal(pkg.benchRuntime.sourcePackageSha256, digest(sourcePackage));
+  assert.equal(pkg.benchRuntime.sourceLockSha256, digest(sourceLock));
+  const extracted = join(root, 'runtime');
+  for (const [name, contents] of files) {
+    const path = join(extracted, name.slice(prefix.length));
+    await mkdir(dirname(path), { recursive: true }); await writeFile(path, contents);
+  }
+  const repacked = await buildRelease({ root: extracted, outputDirectory: join(root, 'repacked') });
+  assert.deepEqual(await readFile(repacked.archivePath), bytes);
+  pkg.benchRuntime.sdkVersion = '1.27.0';
+  await writeFile(join(extracted, 'package.json'), JSON.stringify(pkg));
+  await assert.rejects(buildRelease({ root: extracted }), /MCP/);
 });
 test('packaging refuses missing or stale MCP SDK bundle bytes and floating pins', async t => {
   const { root, put } = await fixture(t);

@@ -1,0 +1,45 @@
+{
+  "name": "toolsenabled-bench",
+  "version": "0.3.2",
+  "description": "Compose, freeze and inspect local benchmark studies with a persistent external data directory.",
+  "author": {
+    "name": "ToolsEnabled, Inc.",
+    "email": "support@toolsenabled.ai",
+    "url": "https://toolsenabled.ai"
+  },
+  "homepage": "https://toolsenabled.ai",
+  "repository": "https://github.com/ToolsEnabled/toolsenabled-bench",
+  "license": "MIT",
+  "keywords": [
+    "benchmarks",
+    "research",
+    "local"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ToolsEnabled Bench",
+    "shortDescription": "Compose and inspect reproducible studies",
+    "developerName": "ToolsEnabled, Inc.",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "longDescription": "Author local benchmark studies, freeze their exact runtime, execute authorized recorded controls and inspect retained evidence.",
+    "defaultPrompt": [
+      "Read my Bench projects and help me inspect a frozen study."
+    ]
+  },
+  "mcpServers": {
+    "bench": {
+      "command": "node",
+      "args": [
+        "./server/mcp-plugin.mjs"
+      ],
+      "cwd": "./",
+      "env_vars": [
+        "BENCHMARK_DATA_DIR"
+      ]
+    }
+  }
+}

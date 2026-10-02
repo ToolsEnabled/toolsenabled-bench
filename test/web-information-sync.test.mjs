@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { startServer } from '../server/main.mjs';
+import { genericStarter, newExperimentDraft } from '../src/benchmark/starters.mjs';
+
+test('information field JSON edits survive a later form edit and reload', { timeout: 40000 }, async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bench-information-json-'));
+  const app = await startServer({ port: 0, dataDir });
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--no-zygote', '--disable-dev-shm-usage'] });
+  t.after(async () => { await browser.close(); await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const spec = newExperimentDraft(genericStarter(), { purpose: 'recorded-diagnostic', initializePopulation: true });
+  const project = await app.projects.create('Information JSON');
+  await app.projects.save(project.id, { spec, attachments: {} }, project.revision);
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(app.origin); await page.locator('[data-page="corpus"]').click();
+  await page.locator('[data-bench-task-tools] > summary').click();
+  await page.locator('[data-bench-prepare-information-fields]').click();
+  await page.locator('[data-information-fields-rationale]').waitFor();
+  await page.getByText('Information field draft JSON', { exact: true }).click();
+  const textarea = page.locator('[data-bench-information-fields]');
+  const draft = JSON.parse(await textarea.inputValue()); draft.rationale = 'Authored in advanced JSON';
+  const saved = () => page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + project.id) && response.ok());
+  let save = saved(); await textarea.fill(JSON.stringify(draft, null, 2)); await textarea.press('Tab'); await save;
+  await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved locally');
+  save = saved(); await page.locator('[data-information-fields-family]').fill('form-edited-family'); await save;
+  const disk = JSON.parse((await app.projects.read(project.id)).draft.editors['data-bench-information-fields']);
+  assert.equal(disk.rationale, draft.rationale); assert.equal(disk.familyId, 'form-edited-family');
+  await page.reload(); await page.locator('[data-page="corpus"]').click();
+  assert.deepEqual(JSON.parse(await textarea.inputValue()), disk); assert.deepEqual(errors, []);
+});

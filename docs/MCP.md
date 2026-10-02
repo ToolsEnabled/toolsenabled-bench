@@ -1,18 +1,18 @@
 # Bench as a local MCP server
 
-Bench 0.3.1 exposes twelve tools through the official MCP SDK 1.26.0 over stdio.
+Bench 0.3.2 exposes twelve tools through the official MCP SDK 1.26.0 over stdio.
 The runtime ZIP includes the bundled SDK and all bundled dependency licences.
 Node.js 22.19 or later is the only requirement for the recorded examples. There
 is no package installation at runtime, network listener, account or hosted server.
 
 ```sh
-node server/mcp.mjs
+BENCHMARK_DATA_DIR=/absolute/private-bench-data node server/mcp.mjs
 ```
 
 An MCP host starts this process and exchanges newline-delimited JSON on stdin and
-stdout. Do not launch it as an HTTP server. Its default data directory is
-`.benchmark-data/` beside the installed application, regardless of the host's
-working directory. `BENCHMARK_DATA_DIR` selects another absolute local directory.
+stdout. Do not launch it as an HTTP server. Set `BENCHMARK_DATA_DIR` to an
+absolute private folder outside the installation. The registration helper requires
+this explicit path; the dashboard refuses folders overlapping the installation.
 There is **one Bench process per data root at a time; the web app and MCP can share a root, but not simultaneously.**
 Stop the current server before opening that root in another client. Back up the
 whole data directory, including the private `.local-origin-key` file. Never share
@@ -23,7 +23,10 @@ a valid local receipt requires explicit trust.
 
 The helper prints a snippet with your current Node executable, installed Bench
 path and data directory. It never edits client configuration or starts a client.
-Shell commands are for POSIX shells on Linux/macOS and PowerShell on Windows.
+Generated shell commands are for POSIX shells on Linux/macOS and PowerShell on Windows.
+Before running the helper, set `BENCHMARK_DATA_DIR` in your shell: `export
+BENCHMARK_DATA_DIR=/absolute/private-bench-data` on POSIX, or
+`$env:BENCHMARK_DATA_DIR = "C:\private-bench-data"` in PowerShell.
 
 ```sh
 node tools/mcp-config.mjs --client claude
@@ -130,7 +133,7 @@ A host can drive the whole offline example with these calls:
 
 The default study replays two authored arithmetic responses. It makes no model
 call and supplies no model-performance evidence. Scientific experiments retain
-Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations identify generator 0.3.1. Historical frozen
+Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations identify generator 0.3.2. Historical frozen
 identities and the template version 2.2.0 are preserved.
 
 ## Execution, foreign studies and bounds
@@ -183,7 +186,7 @@ process, or set a different `BENCHMARK_DATA_DIR`. The lease covers readers too:
 another process cannot misclassify an active run as interrupted or resume it.
 Use a local filesystem and one host/PID namespace for each data root. Older Bench
 versions and direct low-level store scripts do not honor this lease; stop them
-before using 0.3.1. It is not a boundary against hostile same-user code.
+before using 0.3.2. It is not a boundary against hostile same-user code.
 
 Clean shutdown, SIGINT and SIGTERM retain ownership until admitted operations and
 owned runs settle, then remove the lease. MCP also does this when stdin closes.

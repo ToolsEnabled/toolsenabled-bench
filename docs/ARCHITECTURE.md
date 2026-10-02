@@ -1,6 +1,6 @@
 # Architecture and integration boundary
 
-ToolsEnabled Bench 0.3.1 is a standalone local product; its package and frozen generator retain the name ToolsEnabled BenchMark Builder. Its reusable benchmark subsystem has no ToolsEnabled Fleet, engine, account, or Electron dependency.
+ToolsEnabled Bench 0.3.2 is a standalone local product; its package and frozen generator retain the name ToolsEnabled BenchMark Builder. Its reusable benchmark subsystem has no ToolsEnabled Fleet, engine, account, or Electron dependency.
 
 ```text
 Browser workspace (src/app/)

@@ -1,3 +1,12 @@
+# 0.3.2 — retained Inspect, draft validation and Claude packaging
+
+- The builder owns retained Inspect state. A failed second Inspect retires the first inspected snapshot even after view-only navigation, while preserving the user’s own freeze and run evidence.
+- An Inspect response cannot replace a freeze or run completed while its package was loading. Inspect again after the operation to open that retained study.
+- Removed the unused builder-wait helper; Inspect still refuses immediately while the builder is busy.
+- MCP writes and saved-project/file loading validate retained editor container shapes before accepting a draft. Damaged legacy variance state no longer crashes its consumers; incomplete authoring text remains intact.
+- Claude plugin `toolsenabled-bench` adds a workflow skill and direct Node launch with required external state. Desktop bundle tooling and a separate Registry draft generator support later release qualification; native Desktop acceptance remains pending.
+- New freezes and template citations identify generator 0.3.2. The research template remains 2.2.0 and historical frozen identities are preserved.
+
 # 0.3.1 — web release fixes
 
 - Sidebar, overview and methods citations use the package version injected at build time.
@@ -48,14 +57,14 @@ Original 0.1.0 exports retain their own runtime, hashes, citations and evidence.
 
 ## Run locally
 
-With Node.js 22.19 or later, extract `toolsenabled-benchmark-builder-0.2.0.zip` and run:
+For the current 0.3.2 package, use Node.js 22.19 or later, extract `toolsenabled-benchmark-builder-0.3.2.zip` and run:
 
 ```sh
 node tools/release.mjs --verify
-node server/main.mjs
+BENCHMARK_DATA_DIR=/absolute/private-bench-data node server/main.mjs
 ```
 
-Open `http://127.0.0.1:4318`. Serving the prebuilt app requires no package installation or network connection. Back up `.benchmark-data/` to preserve local drafts and run evidence.
+Open `http://127.0.0.1:4318`. Serving the prebuilt app requires no package installation or network connection. Choose an absolute `BENCHMARK_DATA_DIR` outside the installation and back up that entire folder to preserve local drafts and run evidence.
 
 ## Beta scope
 

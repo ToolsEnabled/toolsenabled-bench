@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { startServer } from '../server/main.mjs';
+import { genericStarter, newExperimentDraft } from '../src/benchmark/starters.mjs';
+
+test('an unreadable or corrupt project cannot hide healthy projects, and its warning survives navigation', { timeout: 40000 }, async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bench-list-warning-'));
+  const app = await startServer({ port: 0, dataDir });
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--no-zygote', '--disable-dev-shm-usage'] });
+  t.after(async () => { await browser.close(); await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const spec = newExperimentDraft(genericStarter(), { purpose: 'recorded-diagnostic', initializePopulation: true });
+  const healthy = await app.projects.create('Healthy'); await app.projects.save(healthy.id, { spec, attachments: {} }, healthy.revision);
+  const broken = await app.projects.create('Corrupt'); const badFile = join(dataDir, 'projects', broken.id + '.json');
+  const original = await readFile(badFile); await writeFile(badFile, 'broken json');
+  const unreadable = await app.projects.create('Unreadable'); const unreadableFile = join(dataDir, 'projects', unreadable.id + '.json');
+  const unreadableOriginal = await readFile(unreadableFile); await rm(unreadableFile); await mkdir(unreadableFile);
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(app.origin);
+  await page.getByRole('heading', { name: 'Build the benchmark. Keep the evidence.' }).waitFor({ timeout: 8000 });
+  assert.equal(await page.locator('#project-picker').inputValue(), healthy.id);
+  const warning = page.locator('#project-warning');
+  assert.match(await warning.innerText(), /2 project files could not be opened and were skipped/);
+  assert.ok(!(await warning.innerText()).includes(dataDir));
+  await page.locator('[data-page="library"]').click(); assert.equal(await warning.isVisible(), true);
+  assert.equal(await readFile(badFile, 'utf8'), 'broken json');
+  await writeFile(badFile, original); await rm(unreadableFile, { recursive: true }); await writeFile(unreadableFile, unreadableOriginal);
+  await page.reload(); await page.getByRole('heading', { name: 'Build the benchmark. Keep the evidence.' }).waitFor();
+  assert.equal(await warning.isVisible(), false); assert.equal(await page.locator('#project-picker option').count(), 3);
+  assert.deepEqual(errors, []);
+});

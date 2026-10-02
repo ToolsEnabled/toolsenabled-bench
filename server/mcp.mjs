@@ -1,4 +1,8 @@
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { pluginStateDirectory, PluginStateError } from './plugin-state.mjs';
 import { Transform } from 'node:stream';
 import { Server, StdioServerTransport, ListToolsRequestSchema, CallToolRequestSchema } from './mcp-sdk.mjs';
 import { createBenchService, MAX_INPUT_BYTES } from './mcp-service.mjs';
@@ -28,7 +32,10 @@ process.stdout.once('error', () => void shutdown());
 input.once('error', () => { process.exitCode = 1; void shutdown(); });
 startup = (async () => {
   const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  service = await createBenchService();
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  let dataDir = process.env.BENCHMARK_DATA_DIR;
+  if (existsSync(resolve(root, '.claude-plugin/plugin.json'))) dataDir = await pluginStateDirectory(root, dataDir);
+  service = await createBenchService({ dataDir });
   if (stopping) return;
   server = new Server({ name: 'toolsenabled-bench', version }, { capabilities: { tools: {} },
     instructions: 'Bench stores local projects and frozen studies. Run and qualify execute declared code: confirm must name the studyId; foreign studies also need explicit trust. Start with composition.update for an authored recorded diagnostic. No hosted service.' });
@@ -42,6 +49,6 @@ startup = (async () => {
 })();
 try { await startup; }
 catch (error) {
-  process.stderr.write(error instanceof DataRootLeaseError ? error.message + '\n' : 'Bench MCP could not start. Verify the runtime build and local data directory.\n');
+  process.stderr.write((error instanceof DataRootLeaseError || error instanceof PluginStateError) ? error.message + '\n' : 'Bench MCP could not start. Verify the runtime build and local data directory.\n');
   process.exitCode = 1; await shutdown();
 }

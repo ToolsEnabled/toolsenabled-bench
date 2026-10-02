@@ -11,7 +11,7 @@
 // Compositions nest by name: a slot inside a composition may hold another
 // composition, which may hold another, without limit. The model in
 // research-routing.mjs resolves that; this file only shows it.
-import { ROUTING_TESTS, compositionDepth, decisionDepth, fallbackOutcome, routingPreview, ruleOutcome, validateRouting } from './research-routing.mjs'
+import { ROUTING_TESTS, compositionDepth, decisionDepth, fallbackOutcome, routingPreview, ruleOutcome, validateRouting, routingEditorDraft } from './research-routing.mjs'
 import { slotAccepts, slotRoleText } from './benchmark/composition.mjs'
 import './research-routing.css'
 
@@ -465,7 +465,7 @@ export function createRoutingEditor({ onChange = () => {}, onCapture = () => {},
 
   return {
     el,
-    setContext({ catalog: nextCatalog = [], draft: nextDraft = null, selected = '' } = {}) { catalog = nextCatalog; draft = nextDraft; compositionPage = 0; compositionSearch = ''; choiceSearch.clear(); compositionIndex = draft?.compositions.findIndex(item => item.name === selected) ?? -1; render() },
+    setContext({ catalog: nextCatalog = [], draft: nextDraft = null, selected = '' } = {}) { catalog = nextCatalog; draft = nextDraft === null ? null : routingEditorDraft(nextDraft); compositionPage = 0; compositionSearch = ''; choiceSearch.clear(); compositionIndex = draft?.compositions.findIndex(item => item.name === selected) ?? -1; render() },
     addComposition(node = {}) {
       if (!draft || disposed) return
       let index = 1
@@ -474,7 +474,7 @@ export function createRoutingEditor({ onChange = () => {}, onCapture = () => {},
       compositionIndex = draft.compositions.length - 1; changed()
     },
     read() { return draft },
-    write(next) { draft = next; render() },
+    write(next) { draft = next === null ? null : routingEditorDraft(next); render() },
     destroy() { disposed = true; el.replaceChildren() },
   }
 }

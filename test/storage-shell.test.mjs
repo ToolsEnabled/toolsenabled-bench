@@ -11,7 +11,7 @@ const draft = (name) => ({
   spec: { ...genericStarter(), name },
   attachments: {},
 });
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const dom = installDomStandIn(globalThis),
     records = new Map();
   const store = {
@@ -21,6 +21,7 @@ async function fixture(t) {
   const view = createBenchmarkBuilder({
     projectStore: store,
     loadSources: async () => ({}),
+    ...options,
   });
   document.body.append(view.el);
   t.after(() => {
@@ -54,7 +55,7 @@ test("local saved replacement retains one Undo through project reopen, including
   assert.equal(Object.hasOwn(view.snapshot().undo, "undo"), false);
 });
 
-test("failed stored draft validation or read retains the current editable project and reports failure", async (t) => {
+test("failed stored draft validation or read clears and locks the editor until a project opens", async (t) => {
   const { view, records, store } = await fixture(t);
   await view.openDraft(draft("Keep this project"), "Original");
   field(view, "wording").value = "Keep pending {{";
@@ -63,7 +64,8 @@ test("failed stored draft validation or read retains the current editable projec
   records.set("broken", { spec: { catalog: [], tasks: [] } });
   const result = await view.setContext("broken", "local", { reload: true });
   assert.equal(result?.ok, false);
-  assert.deepEqual(view.snapshot(), before);
+  assert.equal(view.study.catalog.length, 0);
+  assert.equal(field(view, "name").disabled, true);
   assert.match(result.reason, /supported benchmark draft/);
   store.read = async () => {
     throw new Error("Local project could not be read");
@@ -73,6 +75,9 @@ test("failed stored draft validation or read retains the current editable projec
   });
   assert.equal(unavailable.ok, false);
   assert.match(unavailable.reason, /could not be read/);
+  assert.equal(view.study.catalog.length, 0);
+  assert.equal(field(view, "name").disabled, true);
+  assert.equal((await view.setContext("A", "local")).ok, true);
   assert.deepEqual(view.snapshot(), before);
 });
 
@@ -108,7 +113,7 @@ test("an editor without a project store never invokes an inherited account adapt
   assert.equal(view.study.name, "Local-only draft");
 });
 
-test("same-project reload saves pending edits before reopening and a failed switch retains selection", async () => {
+test("same-project reload saves pending edits before reopening and a failed load clears selection", async () => {
   const { createProjectSession } = await import(
     "../src/app/project-session.js"
   );
@@ -140,7 +145,7 @@ test("same-project reload saves pending edits before reopening and a failed swit
   await session.select("A");
   assert.equal(editable.text, "Unfinished {{");
   await assert.rejects(session.select("missing"), /Read failed/);
-  assert.equal(session.current, "A");
+  assert.equal(session.current, null);
   assert.equal(editable.text, "Unfinished {{");
 });
 
@@ -289,4 +294,37 @@ test("a conflict followed by reverting and saving must not claim stale content i
   assert.equal(session.state.label, 'Not saved');
   assert.equal(session.hasUnsavedChanges, true);
   assert.equal(record.draft.text, 'Other window');
+});
+
+for (const mode of ['throw', 'refusal']) test(`a ${mode} after partial loading clears autosave ownership`, async () => {
+  const { createProjectSession } = await import('../src/app/project-session.js');
+  let editable = { text: 'H' }; const writes = [];
+  const session = createProjectSession({
+    read: async id => ({ revision: 0, draft: { text: id } }),
+    write: async (id, value) => { writes.push({ id, value }); return { revision: 1 }; },
+    snapshot: () => structuredClone(editable), identify: JSON.stringify,
+    load: async id => {
+      editable = await session.store.read(id);
+      if (id === 'D') { if (mode === 'throw') throw new Error('Render failed'); return { ok: false, reason: 'Render failed' }; }
+      return { ok: true };
+    },
+  });
+  await session.select('H'); await assert.rejects(session.select('D'), /Render failed/);
+  editable.text = 'D edited'; session.markEdited(); await session.saveCurrent();
+  assert.deepEqual(writes, [], 'a load failure must not write D into H');
+  assert.equal(session.current, null); assert.equal(session.state.label, 'No project selected');
+  await session.select('H'); assert.equal(session.current, 'H');
+});
+
+
+test("a render-completion exception clears partial content and the next project can still open", async t => {
+  const { view, records } = await fixture(t, { onBenchmarkLoaded(spec) { if (spec.name === 'Throw after render') throw new Error('Completion failed'); } });
+  records.set('D', draft('Throw after render'));
+  assert.equal((await view.setContext('D', 'local', { reload: true })).ok, false);
+  assert.equal(view.study.catalog.length, 0); assert.equal(view.study.tasks.length, 0);
+  assert.equal(field(view, 'name').disabled, true); assert.equal(field(view, 'save').disabled, true);
+  assert.equal(view.frozenSha256, null);
+  records.set('H', draft('Healthy'));
+  assert.equal((await view.setContext('H', 'local', { reload: true })).ok, true);
+  assert.equal(view.study.name, 'Healthy'); assert.equal(field(view, 'name').disabled, false);
 });

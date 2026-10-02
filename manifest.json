@@ -1,0 +1,53 @@
+{
+  "manifest_version": "0.3",
+  "name": "toolsenabled-bench",
+  "display_name": "ToolsEnabled Bench",
+  "version": "0.3.2",
+  "description": "Compose local benchmark studies, freeze their exact runtime and inspect retained evidence. Execution requires the declared study identity.",
+  "author": {
+    "name": "ToolsEnabled, Inc.",
+    "email": "support@toolsenabled.ai",
+    "url": "https://toolsenabled.ai"
+  },
+  "homepage": "https://toolsenabled.ai",
+  "documentation": "https://github.com/ToolsEnabled/toolsenabled-bench#readme",
+  "support": "mailto:support@toolsenabled.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ToolsEnabled/toolsenabled-bench"
+  },
+  "license": "MIT",
+  "privacy_policies": [
+    "https://toolsenabled.ai/legal/privacy/"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "server/mcp-plugin.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/mcp-plugin.mjs"
+      ],
+      "env": {
+        "BENCHMARK_DATA_DIR": "${user_config.data_directory}"
+      }
+    }
+  },
+  "user_config": {
+    "data_directory": {
+      "type": "directory",
+      "title": "Private Bench data folder",
+      "description": "Absolute path to a private state folder outside the whole plugin cache and installation. Use a separate folder for each simultaneous client; reuse it across plugin upgrades.",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
+    "runtimes": {
+      "node": ">=22.19.0"
+    }
+  }
+}

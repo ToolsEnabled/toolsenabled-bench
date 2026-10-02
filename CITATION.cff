@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "Please cite this software and the exact version used. Cite each generated study separately."
 type: software
 title: "ToolsEnabled BenchMark Builder"
-version: "0.3.1"
+version: "0.3.2"
 authors:
   - family-names: Pinckard
     given-names: Joshua

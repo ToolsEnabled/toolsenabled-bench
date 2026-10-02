@@ -1,6 +1,6 @@
 # ToolsEnabled Bench
 
-**Version 0.3.1 beta · MIT License**
+**Version 0.3.2 beta · MIT License**
 
 ToolsEnabled Bench is a standalone research workbench for composing benchmark tasks, freezing protocols, exporting runnable studies and regenerating reports from retained evidence. It stores projects locally and requires no ToolsEnabled account. It is a separate product from ToolsEnabled Fleet. The worked UI examples use authored recorded controls; they contain no live model measurements.
 
@@ -16,29 +16,30 @@ ToolsEnabled Bench is a standalone research workbench for composing benchmark ta
 
 ## Run the prebuilt release
 
-Requires **Node.js 22.19 or later**. Extract `toolsenabled-benchmark-builder-0.3.1.zip`, open its directory and run:
+Requires **Node.js 22.19 or later**. Extract `toolsenabled-benchmark-builder-0.3.2.zip`, open its directory and run:
 
 ```sh
 node tools/release.mjs --verify
-node server/main.mjs
+BENCHMARK_DATA_DIR=/absolute/private-bench-data node server/main.mjs
 ```
 
 Open **http://127.0.0.1:4318**. The server binds only to `127.0.0.1`. Serving the prebuilt application and using its recorded examples requires no package installation or network connection. External collection requires the environment declared by that study.
 
-The archive includes `RELEASE.md` and a file hash inventory. Release sidecars `SOURCE-MANIFEST.json`, `VERIFICATION.json` and `SHA256SUMS` identify the exact source, recorded checks and archive bytes. These checks establish content integrity, not publisher authentication.
+The archive includes `RELEASE.md` and a file hash inventory. Release sidecars `SOURCE-MANIFEST.json`, `SOURCE-PINS.json`, `VERIFICATION.json` and `SHA256SUMS` identify the exact source, recorded checks and archive bytes. These checks establish content integrity, not publisher authentication.
 
 ## MCP hosts
 
-Bench 0.3.1 also runs as a local stdio MCP server: `node server/mcp.mjs`.
+Bench 0.3.2 also runs as a local stdio MCP server: `node server/mcp.mjs`.
 The runtime ZIP includes its pinned SDK; no runtime install or network is needed.
-Run `node tools/mcp-config.mjs --client codex` to print registration; `claude`,
+Set `BENCHMARK_DATA_DIR` to an absolute private folder outside the installation,
+then run `node tools/mcp-config.mjs --client codex` to print registration; `claude`,
 `deepseek`, `cursor` and `claude-desktop` are supported too. See [MCP setup and tool
-reference](docs/MCP.md). MCP and the browser use the same local store. Execution
+reference](docs/MCP.md). Set both interfaces to the same absolute external data folder and stop one before starting the other. Execution
 requires explicit study-ID confirmation; foreign studies additionally require trust.
 
 ## Local projects and evidence
 
-Projects and runs are stored in `.benchmark-data/` beside the application. Set `BENCHMARK_DATA_DIR` to choose another local data directory or `BENCHMARK_PORT` to choose another local port. Back up the entire data directory.
+Set `BENCHMARK_DATA_DIR` to an absolute private folder outside the installation before starting the dashboard. Plugin launches refuse paths overlapping their installation. `BENCHMARK_PORT` chooses another local port. Back up the entire data directory.
 
 Drafts retain unfinished editor fields and one replacement Undo snapshot. Revision checks refuse conflicting saves. Each run retains its frozen package, process log and evidence separately from the editable draft.
 
@@ -80,7 +81,7 @@ npm ci
 npm run build
 npm test
 npm run check:core
-npm run serve
+BENCHMARK_DATA_DIR=/absolute/private-bench-data npm run serve
 ```
 
 Browser acceptance additionally requires a supported Playwright Chromium installation:
@@ -108,4 +109,15 @@ Copyright (c) 2026 Joshua Pinckard. Distributed under the [MIT License](LICENSE)
 
 Joshua Pinckard conceived the project, defined its objectives and requirements, directed the autonomous agent workflows, selected and evaluated outputs, and assumes responsibility for the research methodology and conclusions. AI agents generated substantial portions of the implementation and written drafts. See [ATTRIBUTION.md](ATTRIBUTION.md).
 
-The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). The 0.3.1 package and frozen generator retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.
+The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). The 0.3.2 package and frozen generator retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.
+
+## Claude plugin
+
+The `toolsenabled-bench` plugin provides the Bench workflow skill and direct Node
+MCP launch with an absolute private data directory outside the plugin cache.
+See [Claude installation and packaging](docs/CLAUDE-INSTALL.md) for local-scope
+installation, persistent state, human dashboard access and release qualification.
+A Desktop bundle is provided for qualification; native macOS/Windows acceptance
+is not yet established. ToolsEnabled is not affiliated with or endorsed by Anthropic.
+
+[Support](mailto:support@toolsenabled.ai) · [Privacy](https://toolsenabled.ai/legal/privacy/).

@@ -33,6 +33,8 @@ export function createProjectSession({
       hasUnsavedChanges: dirty || saving || !!error,
       label: switching
         ? "Opening project…"
+        : !current
+          ? "No project selected"
         : error
           ? "Not saved"
           : saving
@@ -138,6 +140,10 @@ export function createProjectSession({
       try {
         // Reopening the current project (including run inspection) also saves pending fields.
         await saveCurrent();
+        // Once loading starts the editor may change before it reports failure.
+        // No prior project may own a snapshot produced by that partial load.
+        current = null;
+        publish();
         const result = await load(id);
         if (result?.ok === false)
           throw new Error(result.reason || "The project could not be opened.");

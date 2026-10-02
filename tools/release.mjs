@@ -12,13 +12,16 @@ const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PRODUCT = 'ToolsEnabled BenchMark Builder';
 const MANIFEST = 'RELEASE-MANIFEST.json';
 const TOP_LEVEL = [
-  'package.json', 'package-lock.json', 'plugins.json', 'index.html',
+  'package.json', 'release-config.json', 'plugins.json', 'index.html',
   'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
   'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md',
+  '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.mcp.json', 'manifest.json',
+  'skills/toolsenabled-bench/SKILL.md',
 ];
 const TOOL_FILES = [
   'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-config.mjs',
   'tools/check-benchmark-core-independent.mjs', 'tools/release.mjs',
+  'tools/package-mcpb.mjs', 'tools/mcpb-clock.cjs', 'tools/registry-draft.mjs',
 ];
 const TREES = new Map([
   ['src', new Set(['.js', '.mjs', '.css', '.json', '.svg', '.py'])],
@@ -29,7 +32,7 @@ const TREES = new Map([
 ]);
 const REQUIRED = [
   ...TOP_LEVEL, ...TOOL_FILES, 'server/main.mjs', 'server/runs.mjs',
-  'server/store.mjs', 'server/local-origin.mjs', 'server/data-root-lease.mjs', 'server/mcp.mjs', 'server/mcp-service.mjs',
+  'server/store.mjs', 'server/local-origin.mjs', 'server/data-root-lease.mjs', 'server/mcp.mjs', 'server/mcp-plugin.mjs', 'server/plugin-state.mjs', 'server/mcp-service.mjs',
   'server/mcp-sdk.mjs', 'server/mcp-sdk.json', 'docs/MCP-LICENSES.md', 'src/benchmark/study.mjs', 'src/benchmark/cli.mjs',
   'src/benchmark/plugins.mjs', 'src/app/main.js', 'dist/index.html',
 ];
@@ -113,12 +116,8 @@ function checkPluginClosure(files) {
   }
 }
 
-function checkMcpClosure(files, pkg, lock) {
-  const pin = pkg.devDependencies?.['@modelcontextprotocol/sdk'];
-  requireValue(typeof pin === 'string' && /^\d+\.\d+\.\d+$/.test(pin) &&
-    lock.packages?.['']?.devDependencies?.['@modelcontextprotocol/sdk'] === pin &&
-    lock.packages?.['node_modules/@modelcontextprotocol/sdk']?.version === pin,
-    'MCP SDK must have one exact matching package and lockfile pin.');
+function checkMcpClosure(files, pin) {
+  requireValue(typeof pin === 'string' && /^\d+\.\d+\.\d+$/.test(pin), 'MCP SDK needs an exact version pin.');
   const meta = JSON.parse(files.get('server/mcp-sdk.json').toString('utf8'));
   requireValue(meta.format === 'bench-mcp-sdk-bundle' && meta.version === 1 && meta.sdkVersion === pin &&
     Array.isArray(meta.packages) && meta.packages.some(row => row.name === '@modelcontextprotocol/sdk' && row.version === pin) &&
@@ -128,7 +127,51 @@ function checkMcpClosure(files, pkg, lock) {
     'MCP SDK bundle or licences differ from the pinned build. Run npm run build.');
 }
 
-async function outputDirectoryFor(requested) {
+async function runtimePackage(root, files, pkg) {
+  if (pkg.benchRuntime) {
+    requireValue(pkg.benchRuntime.format === 1 &&
+      ['sourcePackageSha256', 'sourceLockSha256'].every(key => /^[a-f0-9]{64}$/.test(pkg.benchRuntime[key])) &&
+      ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'scripts'].every(key => !Object.hasOwn(pkg, key)),
+      'Invalid self-contained runtime package metadata.');
+    checkMcpClosure(files, pkg.benchRuntime.sdkVersion);
+    return pkg;
+  }
+  // Check the actual source lock before removing development install inputs.
+  // The runtime retains its source digests and SDK pin for offline repackaging.
+  const bytes = await regularFile(root, 'package-lock.json'), lock = JSON.parse(bytes);
+  requireValue(lock.version === pkg.version && lock.packages?.['']?.version === pkg.version, 'Package and lockfile versions differ.');
+  const pin = pkg.devDependencies?.['@modelcontextprotocol/sdk'];
+  requireValue(typeof pin === 'string' && /^\d+\.\d+\.\d+$/.test(pin) &&
+    lock.packages?.['']?.devDependencies?.['@modelcontextprotocol/sdk'] === pin &&
+    lock.packages?.['node_modules/@modelcontextprotocol/sdk']?.version === pin,
+    'MCP SDK must have one exact matching package and lockfile pin.');
+  checkMcpClosure(files, pin);
+  return {
+    name: pkg.name, version: pkg.version, private: true, type: 'module', engines: pkg.engines,
+    benchRuntime: { format: 1, sdkVersion: pin,
+      sourcePackageSha256: sha256(files.get('package.json')), sourceLockSha256: sha256(bytes) },
+  };
+}
+
+function checkClaudePackaging(files, pkg) {
+  const plugin = JSON.parse(files.get('.claude-plugin/plugin.json'));
+  const desktop = JSON.parse(files.get('manifest.json'));
+  const codex = JSON.parse(files.get('.codex-plugin/plugin.json'));
+  const code = JSON.parse(files.get('.mcp.json')).mcpServers?.bench;
+  for (const metadata of [plugin, desktop, codex])
+    requireValue(metadata.name === 'toolsenabled-bench' && metadata.version === pkg.version, 'Claude package identity differs from package.json.');
+  requireValue(plugin.userConfig?.data_directory?.required === true && desktop.user_config?.data_directory?.required === true,
+    'Claude packages must require an external data_directory.');
+  for (const [config, path] of [[code, '${CLAUDE_PLUGIN_ROOT}/server/mcp-plugin.mjs'], [desktop.server?.mcp_config, '${__dirname}/server/mcp-plugin.mjs']])
+    requireValue(config?.command === 'node' && JSON.stringify(config.args) === JSON.stringify([path]) &&
+      config.env?.BENCHMARK_DATA_DIR === '${user_config.data_directory}', 'Claude packages must launch Node directly with external state in env.');
+  requireValue(desktop.server.type === 'node' && desktop.server.entry_point === 'server/mcp-plugin.mjs', 'Desktop entry point differs from the plugin launch.');
+  requireValue(codex.mcpServers?.bench?.command === 'node' && codex.mcpServers.bench.cwd === './' &&
+    JSON.stringify(codex.mcpServers.bench.args) === '["./server/mcp-plugin.mjs"]' &&
+    JSON.stringify(codex.mcpServers.bench.env_vars) === '["BENCHMARK_DATA_DIR"]', 'Codex must launch the plugin entry with explicit external-state forwarding.');
+}
+
+export async function outputDirectoryFor(requested) {
   const directory = resolve(requested), parents = [];
   for (let path = directory; ; path = dirname(path)) {
     parents.unshift(path);
@@ -150,7 +193,7 @@ async function outputDirectoryFor(requested) {
   return directory;
 }
 
-async function checkOutputFile(path) {
+export async function checkOutputFile(path) {
   let stat;
   try { stat = await lstat(path); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
   requireValue(!stat.isSymbolicLink(), `Release output paths must not be symlinks: ${path}`);
@@ -223,27 +266,27 @@ function releaseReadme(pkg) {
     `This is the standalone runtime distribution. Requires Node.js ${pkg.engines.node}.\n` +
     'The prebuilt application and exported-study runtime are included. No account or package installation is required to serve this archive.\n\n' +
     '## Run offline\n\n' +
-    'Extract the ZIP, open its directory, and run:\n\n```sh\nnode tools/release.mjs --verify\nnode server/main.mjs\n```\n\n' +
-    'Open http://127.0.0.1:4318. The server binds only to 127.0.0.1. Projects and runs are stored in `.benchmark-data/` in the extracted directory. Back up that directory. `BENCHMARK_DATA_DIR` and `BENCHMARK_PORT` can select another local data directory and port.\n\n' +
+    'Extract the ZIP, open its directory, and run (replace the absolute data path):\n\n```sh\nnode tools/release.mjs --verify\nBENCHMARK_DATA_DIR=/absolute/private-bench-data node server/main.mjs\n```\n\n' +
+    'Open http://127.0.0.1:4318. The server binds only to 127.0.0.1. Projects and runs live in the chosen external directory; back it up. The plugin dashboard refuses paths overlapping the installation. `BENCHMARK_PORT` selects another local port.\n\n' +
     'The examples are authored recorded controls, with no live model-result claims. External collectors require their separately declared environment. Optional native Lean execution requires its Python/Docker apparatus; it is not needed for the recorded examples.\n\n' +
     '## MCP over stdio\n\n' +
-    'Run `node server/mcp.mjs` from your MCP host. The pinned SDK and its licences are bundled: no package install or network is required. `node tools/mcp-config.mjs --client codex` prints registration (also claude, deepseek, cursor and claude-desktop). See docs/MCP.md. MCP and the browser use the same .benchmark-data store. study.run and study.qualify execute declared code and require confirm equal to the study ID; foreign studies also need explicit trust.\n\n' +
+    'Set an absolute external BENCHMARK_DATA_DIR, then run `node server/mcp.mjs` from your MCP host. The pinned SDK and its licences are bundled: no package install or network is required. `node tools/mcp-config.mjs --client codex` prints registration (also claude, deepseek, cursor and claude-desktop). See docs/MCP.md. To inspect MCP projects in the dashboard, stop that client and use the same absolute external BENCHMARK_DATA_DIR. Simultaneous clients need separate folders. study.run and study.qualify execute declared code and require confirm equal to the study ID; foreign studies also need explicit trust.\n\n' +
     '## Rebuild or repackage\n\n' +
-    'Browser, plugin, and server sources are included. Rebuilding requires the locked development dependencies (`npm ci`), then `npm run build`. Serving the existing build needs no dependencies. Repackage unchanged included files with `node tools/release.mjs`; archives use sorted paths, stored bytes, fixed timestamps and fixed file modes. The sibling `.sha256` file hashes the complete ZIP. `RELEASE-MANIFEST.json` hashes each included file except itself; it is an integrity inventory, not a signature or proof of publisher identity.\n\n' +
-    'This runtime distribution omits development test suites and historical test fixtures. The source-checkout validation commands in README.md (`npm test`, `npm run test:standalone`, `npm run test:browser`) apply to the full source repository. The included `npm run check:core` can be used after rebuilding.\n';
+    'Browser, plugin, and server sources are included. A full rebuild uses the corresponding source repository and its locked development dependencies (`npm ci`, then `npm run build`). This runtime deliberately omits development manifests and locks; its package.json records the source package/lock digests and bundled SDK pin. Serving it needs no package installation. Repackage unchanged included files with `node tools/release.mjs`; archives use sorted paths, stored bytes, fixed timestamps and fixed file modes. The sibling `.sha256` file hashes the complete ZIP. `RELEASE-MANIFEST.json` hashes each included file except itself; it is an integrity inventory, not a signature or proof of publisher identity.\n\n' +
+    'This runtime distribution omits development test suites and historical test fixtures. The source-checkout validation commands in README.md (`npm test`, `npm run test:standalone`, `npm run test:browser`) apply to the full source repository.\n';
 }
 
-export async function buildRelease({ root = sourceRoot, outputDirectory = resolve(root, 'release') } = {}) {
+export async function releaseFiles(root = sourceRoot) {
   root = resolve(root);
   const files = await collectFiles(root);
   const pkg = JSON.parse(files.get('package.json').toString('utf8'));
   requireValue(pkg.name === '@toolsenabled/benchmark-builder', 'Unexpected release package identity.');
   requireValue(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version), 'Release version must be a safe semantic version.');
   requireValue(typeof pkg.engines?.node === 'string', 'Release package must declare a Node.js version.');
-  const lock = JSON.parse(files.get('package-lock.json').toString('utf8'));
-  requireValue(lock.version === pkg.version && lock.packages?.['']?.version === pkg.version, 'Package and lockfile versions differ.');
   checkPluginClosure(files);
-  checkMcpClosure(files, pkg, lock);
+  const runtime = await runtimePackage(root, files, pkg);
+  files.set('package.json', Buffer.from(JSON.stringify(runtime, null, 2) + '\n'));
+  checkClaudePackaging(files, pkg);
   files.set('RELEASE.md', Buffer.from(releaseReadme(pkg)));
   const manifest = {
     format: 'toolsenabled-benchmark-builder-release', version: 1,
@@ -253,6 +296,11 @@ export async function buildRelease({ root = sourceRoot, outputDirectory = resolv
     }])),
   };
   files.set(MANIFEST, Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
+  return { pkg, files };
+}
+
+export async function buildRelease({ root = sourceRoot, outputDirectory = resolve(root, 'release') } = {}) {
+  const { pkg, files } = await releaseFiles(root);
   const directoryName = `toolsenabled-benchmark-builder-${pkg.version}`;
   const archive = releaseZip(new Map([...files].map(([name, bytes]) => [`${directoryName}/${name}`, bytes])));
   const archiveName = `${directoryName}.zip`, digest = sha256(archive);

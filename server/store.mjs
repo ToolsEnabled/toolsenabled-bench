@@ -1,17 +1,27 @@
-import { mkdir, readFile, rename, readdir, open } from "node:fs/promises";
+import { mkdir, readFile, rename, readdir, open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 export const projectId = (value) => /^rp-[a-f0-9]{32}$/.test(value);
+function storageError(message, cause) {
+  const error = new Error(message);
+  error.code = cause.code;
+  return error;
+}
 export async function atomicJSON(path, value) {
   const temp = path + "." + randomUUID() + ".tmp";
-  const file = await open(temp, "wx", 0o600);
+  let file, created = false;
   try {
+    file = await open(temp, "wx", 0o600); created = true;
     await file.writeFile(JSON.stringify(value, null, 2) + "\n");
     await file.sync();
+    await file.close(); file = null;
+    await rename(temp, path); created = false;
+  } catch (cause) {
+    throw storageError("Could not save local data. Check that your data folder is writable and has free space.", cause);
   } finally {
-    await file.close();
+    if (file) await file.close().catch(() => {});
+    if (created) await unlink(temp).catch(() => {});
   }
-  await rename(temp, path);
 }
 export class ProjectStore {
   constructor(root) {
@@ -23,19 +33,32 @@ export class ProjectStore {
   }
   async read(id) {
     if (!projectId(id)) throw new Error("Unknown project.");
-    return JSON.parse(await readFile(join(this.root, id + ".json"), "utf8"));
+    let contents;
+    try { contents = await readFile(join(this.root, id + ".json"), "utf8"); }
+    catch (cause) {
+      const error = new Error("Project file missing or unreadable.");
+      error.code = cause.code;
+      throw error;
+    }
+    return JSON.parse(contents);
   }
-  async list() {
-    const rows = await Promise.all(
-      (await readdir(this.root))
-        .filter((n) => /^rp-[a-f0-9]{32}\.json$/.test(n))
-        .map(async (name) => {
-          const { draft, ...meta } = JSON.parse(
-            await readFile(join(this.root, name), "utf8"),
-          );
-          return meta;
-        }),
-    );
+  async list({ onWarning = () => {} } = {}) {
+    let files;
+    try { files = await readdir(this.root); }
+    catch (cause) { throw storageError("Could not list projects. Check access to your local data folder.", cause); }
+    const candidates = files.filter(name => /^rp-[a-f0-9]{32}\.json$/.test(name));
+    const records = await Promise.all(candidates.map(async name => {
+      try {
+        const record = await this.read(name.slice(0, -5));
+        if (!record || record.id !== name.slice(0, -5) || typeof record.title !== "string" ||
+            !Number.isSafeInteger(record.revision) || record.revision < 0 ||
+            typeof record.createdAt !== "string" || typeof record.updatedAt !== "string") return null;
+        const { draft, ...meta } = record;
+        return meta;
+      } catch { return null; }
+    }));
+    const rows = records.filter(Boolean), skipped = candidates.length - rows.length;
+    if (skipped) onWarning(`${skipped} project ${skipped === 1 ? "file could" : "files could"} not be opened and ${skipped === 1 ? "was" : "were"} skipped. Check their contents and access permissions.`);
     return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   change(fn) {

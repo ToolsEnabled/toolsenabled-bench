@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "bench": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server/mcp-plugin.mjs"
+      ],
+      "env": {
+        "BENCHMARK_DATA_DIR": "${user_config.data_directory}"
+      }
+    }
+  }
+}

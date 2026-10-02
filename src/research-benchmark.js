@@ -1,3 +1,4 @@
+import { validateRetainedDraft } from './research-retained-editors.mjs'
 import { el } from './components.js'
 import { persistedDraftIdentity } from './research-draft-identity.mjs'
 import { createReviewRecord, canonical, compilePrompt, invariant, object, reviewStatus, sha256 } from './benchmark/prompts.mjs'
@@ -55,7 +56,7 @@ import { createTaskReviewRecord, informationPlanFromTask, taskReviewStatus, vali
 import { NATIVE_EVIDENCE_LIMITS, verifyNativeJournalEvidence, materializeNativeControl, auditFileBytes, auditFileText, auditReferencePaths, auditReviewStatus, auditStudyFromReference, createAuditReviewRecord, materializeAudit, sealAuditReference } from './benchmark/audit.mjs'
 import { snippetTitle, snippetLabels, snippetChoice, snippetMetadata, filterSnippets, exportSnippetLibrary, importSnippetLibrary } from './research-snippets.mjs'
 import { exampleExperimentDrafts, isExampleSnippet, loadExampleSnippets } from './research-examples-lazy.mjs'
-import { createRoutingDraft, routedTasks, expandComposition } from './research-routing.mjs'
+import { createRoutingDraft, routedTasks, expandComposition, routingEditorDraft } from './research-routing.mjs'
 import { createRoutingEditor } from './research-routing.js'
 import { createCompositionGenerator } from './research-composition-generator.js'
 import { compositionGenerationBinding, previewCompositionGeneration, saveGeneratedCompositions } from './research-composition-generator.mjs'
@@ -504,7 +505,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   const drafts = new Map(), pending = new Set(), branches = new Map()
   let operation = null, loading = false, renderedTask = null
   let draftOrigin = 'Empty draft.'
-  let nativeVerification = null
+  let nativeVerification = null, frozenGeneration = 0
   let preparedInformation = null
   let informationInventory = null, informationInventoryContext = null
   let requirementInventory = null
@@ -563,6 +564,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     onChange: draft => {
       if (disposed || loading || operation || running) return
       field('routing').value = json(draft); changed()
+      renderTreeEditor(draft)
       field('routing-status').textContent = 'Routing changed. Generate tasks to put it into this benchmark.'
     },
     // A unique working name keeps the new arrangement reachable in the library.
@@ -585,6 +587,10 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     },
   })
   field('routing-editor').append(routingEditor.el)
+  // Committed JSON edits must refresh every editor holding a routing copy.
+  field('routing').addEventListener('change', () => {
+    if (!disposed && !loading && !operation && !running) renderRouting()
+  })
   const compositionGenerator = createCompositionGenerator({
     onDraft: state => {
       if (!disposed && !loading && !operation && !running) { field('composition-generation-draft').value = json(state); dirty = true }
@@ -718,7 +724,11 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     draft ||= createRoutingDraft()
     treeEditor.setContext({ catalog: spec.catalog, draft, selected: treeSelected }); treeEditor.addComposition()
   })
-  const varianceStudies = () => field('variance-draft').value ? parse(field('variance-draft').value, 'Variance studies').studies || [] : []
+  const varianceStudies = () => {
+    let studies
+    try { studies = JSON.parse(field('variance-draft').value || '{}')?.studies } catch { return [] }
+    return Array.isArray(studies) ? studies.filter(row => object(row) && (row.marks === undefined || Array.isArray(row.marks))) : []
+  }
   const preparedRecipe = () => field('corpus-plan').value ? parse(field('corpus-plan').value, 'Advanced generation') : null
   const poolBinding = () => promptSetBinding(spec, routingDraft(), varianceStudies(), preparedRecipe())
   const promptSetEditor = createPromptSetEditor({
@@ -938,7 +948,10 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   }
   function routingDraft() {
     const raw = field('routing').value.trim()
-    return raw ? parse(raw, 'Routing draft') : null
+    return raw ? routingEditorDraft(parse(raw, 'Advanced routing JSON')) : null
+  }
+  function routingForView() {
+    try { return routingDraft() } catch (error) { field('routing-status').textContent = error.message; return null }
   }
   function renderRouting() {
     let draft = null, error = ''
@@ -959,17 +972,17 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     renderPromptSet()
     field('routing-status').textContent = error
   }
-  function renderCompositionGenerator(draft = routingDraft()) {
+  function renderCompositionGenerator(draft = routingForView()) {
     let state = null
     try { state = field('composition-generation-draft').value ? parse(field('composition-generation-draft').value, 'Composition generation') : null } catch {}
     compositionGenerator.setContext({ catalog: spec.catalog, routing: draft, state, contextKey: `${source}:${project}:${epoch}` })
   }
-  function renderNesting(draft = routingDraft()) {
+  function renderNesting(draft = routingForView()) {
     let state = null
     try { state = field('nesting-draft').value ? parse(field('nesting-draft').value, 'Nesting draft') : null } catch {}
     nestingEditor.setContext({ catalog: spec.catalog, draft, state, contextKey: `${source}:${project}:${epoch}` })
   }
-  function renderVariance(draft = routingDraft()) {
+  function renderVariance(draft = routingForView()) {
     let state = null
     try { state = field('variance-draft').value ? parse(field('variance-draft').value, 'Variance studies') : null } catch {}
     varianceEditor.setContext({ spec, routing: draft, state, active: !root.querySelector('[data-bench-panel="variance"]').hidden, contextKey: `${source}:${project}:${epoch}` })
@@ -1200,6 +1213,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   const syncSpecEditor = () => { if (!pending.has('specification')) field('spec-json').value = json(spec) }
   function changed() {
     const wasFrozen = !!frozen
+    if (wasFrozen) frozenGeneration++
     dirty = true; frozen = null; openedArchive = null; evidence = null; nativeVerification = null
     renderNativeVerification()
     renderNativePreparationPlan(null); renderNativeControlJobs()
@@ -1288,6 +1302,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   // inside composite editor drafts and never admits an unknown editor field.
   function draftIdentity(value) { return persistedDraftIdentity(value, EDITOR_GROUPS) }
   function validateSavedDraft(value) {
+    validateRetainedDraft(value)
     validateDraft(value.spec, value.attachments || {})
     invariant(value.editors === undefined || object(value.editors), 'The saved editor fields are damaged.')
     invariant(value.pending === undefined || Array.isArray(value.pending), 'The saved edit list is damaged.')
@@ -1298,7 +1313,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
       invariant(value.undo.pending === undefined || Array.isArray(value.undo.pending), 'The saved Undo edit list is damaged.')
     }
   }
-  function remember() { if (source && !loading) drafts.set(`${source}:${project}`, { ...snapshot(), dirty, frozen, openedArchive, evidence, backup }) }
+  function remember() { if (source && project !== 'all' && !loading) drafts.set(`${source}:${project}`, { ...snapshot(), dirty, frozen, openedArchive, evidence, backup }) }
   function resetEditors() {
     // These values include routing and unapplied field authoring, which are not
     // rebuilt from spec. Never let the preceding project's values seed another.
@@ -1680,6 +1695,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   }
   function restoreDraft(data, name, origin = `Opened draft file: ${name}. The experiment fields and snippets came from this file.`) {
     invariant(object(data), 'This file does not contain an experiment draft.')
+    validateRetainedDraft(data)
     const next = data.spec || data
     validateDraft(next, data.attachments || {})
     invariant(data.editors === undefined || object(data.editors), 'The saved editor fields are damaged.')
@@ -1874,7 +1890,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     const candidate = await freezeStudy(prepared)
     assertCurrent(ticket)
     nativeVerification = null; renderNativeVerification()
-    frozen = candidate; openedArchive = null
+    frozenGeneration++; frozen = candidate; openedArchive = null
     renderFrozen()
     status('Project frozen. Its prompts, conditions, schedule and decisions are fixed.')
     return frozen
@@ -2643,13 +2659,13 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
       guard(); invariant(frozen && ['exact', 'json', 'judge-audit', 'resource-action-plan'].includes(frozen.spec.protocol.grading.kind) && frozen.spec.conditions.every(condition => condition.adapter.kind === 'replay'), 'This page runs recorded responses with supported portable grading, including generated resource plans. Use the exported CLI for external systems, custom graders or LEAN Python.')
       const currentProject = frozen, controller = new AbortController()
       assertCollectionAdmission(currentProject, { operation: executionOperation(currentProject), canonicalReplay: true })
-      running = controller; syncControls()
+      frozenGeneration++; running = controller; syncControls()
       const touched = new Set(); field('run-live').textContent = `Running ${currentProject.schedule.length} scheduled trials in this page…`
       try {
         const result = await runStudy(currentProject, { signal: controller.signal, runtime: pageRuntime(), events: evidence?.projectSha256 === currentProject.sha256 ? evidence.events : [], onEvent: event => { if (current(ticket)) { touched.add(event.trialId); field('run-live').textContent = `${touched.size} of ${currentProject.schedule.length} trials started · last: ${event.trialId} ${event.type}` } if (current(ticket)) status(`${event.trialId}: ${event.type === 'started' ? 'running' : event.type === 'workflow-started' ? 'stage ' + event.stageId + ' running' : event.status}`) } })
         assertCurrent(ticket)
         nativeVerification = null; renderNativeVerification()
-        evidence = { projectSha256: currentProject.sha256, ...result }; await renderEvidence(); status(result.preparationFailure ? 'Template preparation stopped: ' + result.preparationFailure : controller.signal.aborted ? 'Run cancelled. Completed and interrupted attempts are retained in its evidence.' : 'Recorded-response run finished. Export its raw evidence to keep it.')
+        frozenGeneration++; evidence = { projectSha256: currentProject.sha256, ...result }; await renderEvidence(); status(result.preparationFailure ? 'Template preparation stopped: ' + result.preparationFailure : controller.signal.aborted ? 'Run cancelled. Completed and interrupted attempts are retained in its evidence.' : 'Recorded-response run finished. Export its raw evidence to keep it.')
       } finally { if (running === controller) { running = null; syncControls(); field('run-live').textContent = controller.signal.aborted ? 'Run cancelled. Completed trials are in the evidence below.' : 'Run finished. Evidence below.' } }
     } else if (has('cancel')) running?.abort(new Error('Cancelled from the Research page.'))
     else if (has('watch-runs')) onWatchRuns()
@@ -2712,13 +2728,13 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
   // The manual file input and retained-study inspection share one archive reader.
   // Verify the expected identity before publishing any archive or run context.
   function clearFrozen() {
-    frozen = null; openedArchive = null; evidence = null; nativeVerification = null
+    frozenGeneration++; frozen = null; openedArchive = null; evidence = null; nativeVerification = null
     field('frozen').textContent = 'No frozen study selected. Open and verify an archive or freeze the draft.'
     for (const name of ['frozen-details', 'frozen-inspection', 'results', 'readiness']) field(name).replaceChildren()
     renderNativeVerification(); renderNativePreparationPlan(null); renderNativeControlJobs()
     syncControls()
   }
-  async function readArchive(file, ticket, expectedSha256) {
+  async function readArchive(file, ticket, expectedSha256, expectedGeneration) {
     // Keep the prior freeze and evidence until every archive check succeeds.
     invariant(file.size <= ARCHIVE_LIMITS.totalBytes, `Project archives are limited to ${ARCHIVE_LIMITS.totalBytes} bytes.`)
     const bytes = new Uint8Array(await file.arrayBuffer()); assertCurrent(ticket)
@@ -2726,7 +2742,8 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     const files = unzipFiles(bytes)
     const opened = await readExportedProject(files, { sources: code }); assertCurrent(ticket)
     invariant(!expectedSha256 || opened.project.sha256 === expectedSha256, 'The retained frozen study could not be verified.')
-    const archive = { ...opened, carried: carriedReportInputs(files) }
+    const archive = { ...opened, carried: carriedReportInputs(files), origin: expectedSha256 ? 'inspect' : 'archive' }
+    invariant(expectedGeneration === undefined || frozenGeneration === expectedGeneration, 'The frozen study or evidence changed while opening the archive. Inspect it again when ready.')
     clearFrozen()
     frozen = opened.project; openedArchive = archive; evidence = null; nativeVerification = null
     field('results').replaceChildren()
@@ -2735,11 +2752,11 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
       ? `Project opened from its archive and verified: ${opened.integrity.checked} files matched its manifest, and this build rebuilds it exactly. Import its run evidence to inspect the results here.`
       : `Project opened from its archive, read-only: ${opened.integrity.checked} files matched its manifest, but this build rebuilds it differently at ${opened.rebuild.differing.join(', ')}. Its evidence and report can be inspected; it cannot be run here.`)
   }
-  async function openExported(file, expectedSha256) {
+  async function openExported(file, expectedSha256, expectedGeneration) {
     invariant(!disposed && !loading && !operation, 'Wait for the current study operation to finish.')
     let result
     await operate(async ticket => {
-      try { await readArchive(file, ticket, expectedSha256); result = { ok: true } }
+      try { await readArchive(file, ticket, expectedSha256, expectedGeneration); result = { ok: true } }
       catch (error) { result = { ok: false, reason: error.message }; throw error }
     })
     return result
@@ -2812,7 +2829,7 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
         const receiptSha256 = await sha256(canonical(receipt)); assertCurrent(ticket)
         invariant(frozen === currentProject, 'The frozen project changed while verifying native evidence.')
         const next = { projectSha256: currentProject.sha256, events: data.events, summary: analyze(currentProject, data.events), nativeVerification: receipt, nativeVerificationSha256: receiptSha256 }
-        evidence = next; nativeVerification = receipt; input.value = ''; await renderEvidence(); renderNativeVerification()
+        frozenGeneration++; evidence = next; nativeVerification = receipt; input.value = ''; await renderEvidence(); renderNativeVerification()
         status('Native artifacts verified for consistency; summary recomputed. Native execution, preparation and experimental admission are not established. Export the separate receipt to retain these checks.')
       } else if (input.hasAttribute('data-bench-open-exported')) {
         const file = input.files?.[0]; if (!file) return
@@ -2837,39 +2854,16 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
         validateJournal(currentProject, data.events, { openedArchive: readOnlyArchive() })
         const imported = await importedReceipts(currentProject, data); assertCurrent(ticket)
         const next = { projectSha256: currentProject.sha256, events: data.events, summary: analyze(currentProject, data.events), ...imported.receipts }
-        evidence = next; nativeVerification = null; renderNativeVerification(); await renderEvidence(); status('Evidence imported; summary recomputed from the bound attempt journal.' + imported.notes)
+        frozenGeneration++; evidence = next; nativeVerification = null; renderNativeVerification(); await renderEvidence(); status('Evidence imported; summary recomputed from the bound attempt journal.' + imported.notes)
       }
     }, { lockControls: external })
   }
   root.addEventListener('change', onChange)
   projectEl.addEventListener('change', onChange)
-  async function setContext(nextProject, nextSource, { reload = false } = {}) {
-    if (disposed) return { ok: false, reason: 'The editor is closed.' }
-    if (!reload && project === nextProject && source === nextSource) return { ok: true }
-    running?.abort(new Error('Project changed.'))
-    remember(); const ticket = ++epoch
-    running = null; operation = null; loading = true
-    // Lock the controls in the same turn the context change was asked for.
-    // The draft below is now awaited, so without this the fields stay live
-    // and editable across the wait and are then replaced underneath whoever
-    // was typing -- which is exactly what the lock exists to prevent.
-    syncControls()
-    const cached = reload ? null : drafts.get(`${nextSource}:${nextProject}`)
-    let saved
-    try {
-      saved = cached || (nextSource === 'mock' || nextProject === 'all' ? null : await storeFor(ticket).read(nextProject))
-      assertCurrent(ticket)
-      if (saved) validateSavedDraft(saved)
-    } catch (error) {
-      if (current(ticket)) { loading = false; status(error.message); syncControls() }
-      return { ok: false, reason: error.message }
-    }
-    if (reload) drafts.clear()
-    const starting = emptyDraft()
-    if (!current(ticket)) return
+  function resetContext(nextProject, nextSource) {
     draftOrigin = 'Empty draft. Create snippets or explicitly import a library or experiment.'
     resetEditors()
-    project = nextProject; source = nextSource; spec = starting; attachments = {}; frozen = null; openedArchive = null; evidence = null; nativeVerification = null; backup = null; dirty = false; taskIndex = 0; bundleIndex = 0; pending.clear(); branches.clear(); renderedTask = null
+    project = nextProject; source = nextSource; spec = emptyDraft(); attachments = {}; frozen = null; openedArchive = null; evidence = null; nativeVerification = null; backup = null; dirty = false; taskIndex = 0; bundleIndex = 0; pending.clear(); branches.clear(); renderedTask = null
     field('snippet-search').value = ''; field('snippet-label-filter').value = ''
     field('snippet-status').textContent = 'Apply edits to use them in this benchmark. Export snippets to keep a portable copy.'
     requirementInventory = null; field('requirement-fields').value = ''; requirementEditor.setContext(null, null)
@@ -2882,28 +2876,51 @@ export function createBenchmarkBuilder({ projectStore, localRunner = false, subm
     for (const name of ['reviewer', 'information-reviewer', 'audit-reviewer', 'directory', 'attachment-path', 'attachment-text', 'import', 'import-reference', 'import-evidence', 'import-native-evidence']) field(name).value = ''
     field('source-code').textContent = ''
     render(); changed(); dirty = false
-    field('scope').textContent = nextSource === 'mock' ? 'Local preview. Create or import a draft here. Saving requires a project store; benchmark runs require a run service.' : nextProject === 'all' ? 'Choose a project or Unfiled to edit its benchmark. All projects is an overview.' : `${nextProject === 'unfiled' ? 'Unfiled benchmark' : 'Selected project'} · This draft belongs only to this project. Import a file to reuse another project’s work.`
-    status('Reading this project’s draft…')
+  }
+  async function setContext(nextProject, nextSource, { reload = false } = {}) {
+    if (disposed) return { ok: false, reason: 'The editor is closed.' }
+    if (!reload && project === nextProject && source === nextSource) return { ok: true }
+    running?.abort(new Error('Project changed.'))
+    remember(); const ticket = ++epoch
+    running = null; operation = null; loading = true
+    syncControls()
+    const cached = reload ? null : drafts.get(`${nextSource}:${nextProject}`)
     try {
+      const saved = cached || (nextSource === 'mock' || nextProject === 'all' ? null : await storeFor(ticket).read(nextProject))
+      assertCurrent(ticket)
+      if (saved) validateSavedDraft(saved)
+      if (reload) drafts.clear()
+      resetContext(nextProject, nextSource)
+      field('scope').textContent = nextSource === 'mock' ? 'Local preview. Create or import a draft here. Saving requires a project store; benchmark runs require a run service.' : nextProject === 'all' ? 'Choose a project or Unfiled to edit its benchmark. All projects is an overview.' : `${nextProject === 'unfiled' ? 'Unfiled benchmark' : 'Selected project'} · This draft belongs only to this project. Import a file to reuse another project’s work.`
+      status('Reading this project’s draft…')
       if (saved) { draftOrigin = saved.origin || 'Saved draft from this local project.'; spec = saved.spec; attachments = saved.attachments || {}; taskIndex = saved.taskIndex || 0; bundleIndex = saved.bundleIndex || 0; render(); for (const group of saved.pending || []) if (Object.hasOwn(EDITOR_GROUPS, group)) pending.add(group); applyEditors(saved.editors); dirty = saved.dirty || false }
       if (saved?.undo) { const { undo: discarded, ...retained } = structuredClone(saved.undo); backup = retained; field('undo').hidden = false }
       if (saved) onBenchmarkLoaded(spec)
       if (cached) { frozen = cached.frozen; openedArchive = cached.openedArchive || null; evidence = cached.evidence; backup = cached.backup; field('undo').hidden = !backup; renderFrozen(); if (evidence) await renderEvidence() }
+      renderInformationFields()
       status(saved ? 'Project draft restored.' : 'This project starts empty. Create snippets, import a file, or explicitly choose a starter.')
       return { ok: true }
-    } catch (error) { if (current(ticket)) status(error.message); return { ok: false, reason: error.message } }
-    finally { if (current(ticket)) { loading = false; renderInformationFields(); syncControls() } }
+    } catch (error) {
+      if (current(ticket)) {
+        drafts.delete(`${nextSource}:${nextProject}`)
+        resetContext('all', 'local')
+        field('scope').textContent = 'No project selected. Choose a project to continue.'
+        status('This project could not be opened. No project is selected for editing. ' + error.message)
+      }
+      return { ok: false, reason: error.message }
+    } finally { if (current(ticket)) { loading = false; syncControls() } }
   }
   render()
   return { el: root, resourceEl, projectEl, setContext, openDraft, openExported, clearFrozen, draftIdentity, destroy() { if (disposed) return; remember(); disposed = true; epoch++; previewEpoch++; running?.abort(new Error('Research page closed.')); running = null; syncControls(); informationEditor.destroy(); requirementEditor.destroy(); compositionEditor.destroy(); conditionEditor.destroy(); routingEditor.destroy(); compositionGenerator.destroy(); nestingEditor.destroy(); varianceEditor.destroy(); promptSetEditor.destroy(); familyEditor.destroy(); familyOccurrenceEditor.destroy() },
+    get frozenGeneration() { return frozenGeneration },
     get frozenSha256() { return frozen?.sha256 || null },
-    get frozenOrigin() { return !frozen ? null : openedArchive ? 'archive' : 'draft' },
+    get frozenOrigin() { return !frozen ? null : openedArchive ? openedArchive.origin || 'archive' : 'draft' },
     get study() { return structuredClone(spec) }, snapshot() { return savedSnapshot() }, selectTab, async importRunEvidence(data) {
       guard(); invariant(frozen && data.projectSha256 === frozen.sha256, 'Open the matching frozen study before loading its results.');
       const ticket = epoch, currentProject = frozen;
       await verifyQualificationJournal(currentProject, data.events); await verifyResourceJournal(currentProject, data.events); validateJournal(currentProject, data.events, { openedArchive: readOnlyArchive() });
       const imported = await importedReceipts(currentProject, data); assertCurrent(ticket);
-      evidence = { projectSha256: currentProject.sha256, events: data.events, summary: analyze(currentProject, data.events), ...imported.receipts };
+      frozenGeneration++; evidence = { projectSha256: currentProject.sha256, events: data.events, summary: analyze(currentProject, data.events), ...imported.receipts };
       nativeVerification = null; renderNativeVerification(); await renderEvidence(); selectTab('run'); status('Local run evidence loaded and analysis recomputed from its journal.');
     }, get dirty() { return dirty } }
 }

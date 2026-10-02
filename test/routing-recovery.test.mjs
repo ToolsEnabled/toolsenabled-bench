@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { register } from 'node:module';
+import { installDomStandIn } from '../tools/test/lib/dom-stand-in.mjs';
+import { genericStarter } from '../src/benchmark/starters.mjs';
+import { validateRetainedDraft } from '../src/research-retained-editors.mjs';
+register('../tools/test/css-loader.mjs', import.meta.url);
+const { createBenchmarkBuilder } = await import('../src/research-benchmark.js');
+const cases = [null, [], true, 'unfinished', { fields: {} }, { compositions: {} }, { rules: {} }, { decisions: [{ rules: {} }] }];
+for (const value of cases) test(`unfinished routing ${JSON.stringify(value)} reopens without losing the authored text`, async t => {
+  const raw = JSON.stringify(value), draft = { spec: genericStarter(), attachments: {}, editors: { 'data-bench-routing': raw } };
+  assert.doesNotThrow(() => validateRetainedDraft(draft), 'unrelated MCP edits must not reject an authored JSON field');
+  const dom = installDomStandIn(globalThis), view = createBenchmarkBuilder({ projectStore: { read: async () => draft }, loadSources: async () => ({}) });
+  document.body.append(view.el);
+  t.after(() => { view.destroy(); view.el.remove(); dom.restore(); });
+  assert.equal((await view.setContext('D', 'local', { reload: true })).ok, true);
+  const field = name => view.el.querySelector(`[data-bench-${name}]`);
+  assert.equal(field('routing').value, raw);
+  assert.match(field('routing-status').textContent, /Advanced routing JSON.*(?:object|list)/);
+  for (const tab of ['compose','nesting','variance','corpus']) assert.doesNotThrow(() => view.selectTab(tab));
+  assert.equal(view.snapshot().editors['data-bench-routing'], raw);
+  assert.equal(field('name').disabled, false);
+});

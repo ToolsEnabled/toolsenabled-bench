@@ -3,6 +3,8 @@ import { readFile, mkdir } from "node:fs/promises";
 import { resolve, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { pluginStateDirectory, PluginStateError } from "./plugin-state.mjs";
 import { ProjectStore } from "./store.mjs";
 import { RunStore } from "./runs.mjs";
 import {
@@ -40,6 +42,8 @@ export async function startServer({
   dataDir = process.env.BENCHMARK_DATA_DIR ||
     resolve(appRoot, ".benchmark-data"),
 } = {}) {
+  if (existsSync(resolve(appRoot, ".claude-plugin/plugin.json")))
+    dataDir = await pluginStateDirectory(appRoot, dataDir);
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   const lease = await acquireDataRootLease(dataDir, "server/main.mjs");
   let runs, server;
@@ -96,7 +100,12 @@ export async function startServer({
               node: process.version,
             });
           if (path === "/api/projects") {
-            if (req.method === "GET") return send(await projects.list());
+            if (req.method === "GET") {
+              let warning;
+              const rows = await projects.list({ onWarning: message => { warning = message; } });
+              if (warning) res.setHeader("X-Benchmark-Project-Warning", warning);
+              return send(rows);
+            }
             if (req.method === "POST")
               return send(await projects.create((await body(req)).title), 201);
           }
@@ -253,7 +262,7 @@ if (
       );
   } catch (error) {
     console.error(
-      error instanceof DataRootLeaseError
+      error instanceof DataRootLeaseError || error instanceof PluginStateError
         ? error.message
         : "Bench web server could not start. Verify the port and local data directory.",
     );

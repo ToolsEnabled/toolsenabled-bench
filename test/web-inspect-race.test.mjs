@@ -287,3 +287,99 @@ test('a run started during the Inspect fetch remains intact when the package arr
   assert.equal(await page.locator('#result-context').isVisible(), false);
   assert.deepEqual(errors, []);
 });
+
+for (const view of ['snippet search', 'task selection']) for (const failure of ['fetch', 'SHA mismatch'])
+  test(`Inspect ownership survives ${view} before a ${failure} failure`, { timeout: 60000 }, async t => {
+    const { page, first, second, open, ready, inspect, settled, posted, errors } = await fixture(t);
+    await open(); await ready(); await inspect(first); await verified(page, first.sha256); await settled();
+    if (view === 'snippet search') {
+      await page.locator('[data-page="library"]').click();
+      await page.locator('[data-bench-snippet-search]').fill('task');
+    } else {
+      await page.locator('[data-page="corpus"]').click();
+      await page.locator('[data-bench-task-tools]').evaluate(el => { el.open = true; });
+      await page.locator('[data-bench-task]').selectOption('1');
+    }
+    await settled(); await page.locator('[data-page="run"]').click();
+    const bannerPreserved = await page.locator('#result-context').isVisible();
+    if (failure === 'fetch') await page.route(`**/api/runs/${second.studyId}/package`, route => route.fulfill({ status: 500, body: 'unavailable' }));
+    else await page.route(`**/api/runs/${second.studyId}`, async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...await response.json(), projectSha256: '0'.repeat(64) } });
+    });
+    await inspect(second);
+    await waitFor(page, 'failed Inspect after view-only input', () => /Could not load|could not be verified/.test(document.querySelector('#notice').textContent));
+    await settled();
+    await page.locator('[data-bench-submit]').click(); await settled();
+    assert.deepEqual(posted, [], 'failed Inspect must not leave A available for submission after a view-only input');
+    assert.ok(!(await page.locator('[data-bench-frozen]').innerText()).includes(first.sha256));
+    for (const name of ['run', 'export']) assert.equal(await page.locator(`[data-bench-${name}]`).isEnabled(), false);
+    assert.equal(bannerPreserved, true, 'view-only inputs preserve the verified Inspect banner');
+    assert.equal(await page.locator('#result-context').isVisible(), false);
+    assert.deepEqual(errors, []);
+  });
+
+for (const action of ['run', 'freeze']) test(`a completed ${action} during Inspect fetch keeps the newer frozen state`, { timeout: 60000 }, async t => {
+  const { page, first, second, open, ready, inspect, settled, errors } = await fixture(t);
+  await open(); await ready();
+  const frozen = await ownFreeze(page, settled);
+  let releaseFetch, signalFetch;
+  const gate = new Promise(resolve => { releaseFetch = resolve; });
+  const fetched = new Promise(resolve => { signalFetch = resolve; });
+  await page.route(`**/api/runs/${first.studyId}/package`, async route => { signalFetch(); await gate; await route.continue(); });
+  let evidence;
+  try {
+    await inspect(first); await checked(page, 'held package request', () => fetched);
+    if (action === 'run') evidence = await ownEvidence(page, settled);
+    else assert.equal(await ownFreeze(page, settled), frozen, 'refreezing may retain exactly the same SHA');
+    releaseFetch();
+    await waitFor(page, 'completed user operation invalidates pending Inspect', () => document.querySelector('#notice').textContent.includes('changed while opening'));
+  } finally { releaseFetch(); }
+  await settled();
+  assert.equal(await page.locator('[data-bench-frozen]').innerText(), frozen);
+  if (evidence) assert.equal(await evidenceBytes(page), evidence);
+  assert.equal(await page.locator('#result-context').isVisible(), false);
+  // The rejected stale request must not block a later explicit inspection.
+  await inspect(second); await verified(page, second.sha256); await settled();
+  assert.deepEqual(errors, []);
+});
+
+test('a draft edit during Inspect fetch does not invalidate an absent frozen state', { timeout: 60000 }, async t => {
+  const { page, first, open, ready, inspect, settled, errors } = await fixture(t);
+  await open(); await ready();
+  let releaseFetch, signalFetch;
+  const gate = new Promise(resolve => { releaseFetch = resolve; });
+  const fetched = new Promise(resolve => { signalFetch = resolve; });
+  await page.route(`**/api/runs/${first.studyId}/package`, async route => { signalFetch(); await gate; await route.continue(); });
+  try {
+    await inspect(first); await checked(page, 'held package request', () => fetched);
+    await page.locator('[data-bench-name]').evaluate(el => { el.value = 'Draft edited while fetching'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    releaseFetch(); await verified(page, first.sha256); await settled();
+    assert.equal(await page.locator('[data-bench-name]').inputValue(), 'Draft edited while fetching');
+    assert.deepEqual(errors, []);
+  } finally { releaseFetch(); }
+});
+
+test('a failed Inspect notice survives a pending background autosave', { timeout: 60000 }, async t => {
+  const { page, second, open, ready, inspect, settled } = await fixture(t);
+  await open(); await ready();
+  let releaseSave, signalSave;
+  const gate = new Promise(resolve => { releaseSave = resolve; });
+  const saving = new Promise(resolve => { signalSave = resolve; });
+  await page.route('**/api/projects/*', async route => {
+    if (route.request().method() === 'PUT') { signalSave(); await gate; }
+    await route.continue();
+  });
+  await page.route(`**/api/runs/${second.studyId}/package`, route => route.fulfill({ status: 500, body: 'unavailable' }));
+  try {
+    await page.locator('[data-bench-name]').evaluate(el => { el.value = 'Pending save'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await inspect(second);
+    await waitFor(page, 'failed inspection shown', () => !document.querySelector('#notice').hidden && document.querySelector('#notice').textContent.includes('Could not load'));
+    await checked(page, 'background save began', () => saving);
+    releaseSave();
+    await waitFor(page, 'draft saved', () => document.querySelector('#save-state').textContent.includes('Saved locally'));
+    await settled();
+    assert.equal(await page.locator('#notice').isVisible(), true);
+    assert.match(await page.locator('#notice').innerText(), /Could not load/);
+  } finally { releaseSave(); }
+});
