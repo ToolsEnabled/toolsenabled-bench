@@ -33,7 +33,7 @@ async function fixture(t) {
     'src/app/main.js', 'dist/index.html', 'dist/assets/app.js',
     'plugins/example.mjs', 'docs/ARCHITECTURE.md',
   ]) await put(name, `Fixture: ${name}\n`);
-  for (const name of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'manifest.json', '.mcp.json']) {
+  for (const name of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'manifest.json', '.mcp.json']) {
     const value = JSON.parse(await readFile(join(repo, name), 'utf8'));
     if (value.version) value.version = '0.2.0';
     await put(name, JSON.stringify(value));
@@ -178,7 +178,7 @@ test('runtime archive preserves binary files, is deterministic across mtimes, an
   assert.ok(files.has(prefix + 'src/benchmark/cli.mjs'));
   assert.ok(files.has(prefix + 'dist/assets/app.js'));
   assert.ok(files.has(prefix + 'tools/plugin-bundle.mjs'));
-  const publicDotFiles = new Set([prefix + '.claude-plugin/plugin.json', prefix + '.codex-plugin/plugin.json', prefix + '.mcp.json']);
+  const publicDotFiles = new Set([prefix + '.claude-plugin/plugin.json', prefix + '.codex-plugin/plugin.json', prefix + '.agents/plugins/marketplace.json', prefix + '.mcp.json']);
   assert.ok([...files.keys()].every(name => publicDotFiles.has(name) || !/(?:^|\/)\.|node_modules|tools\/test|\/test\/|\/release\//.test(name)));
   for (const name of ['.claude-plugin/plugin.json', '.mcp.json', 'manifest.json', 'skills/toolsenabled-bench/SKILL.md', 'server/mcp-plugin.mjs']) assert.ok(files.has(prefix + name), name);
   assert.ok(!files.has(prefix + 'server.json'), 'Registry metadata stays outside the plugin payload');
@@ -343,4 +343,21 @@ test('packaging refuses missing or stale MCP SDK bundle bytes and floating pins'
   await put('package.json', JSON.stringify(pkg));
   await rm(join(root, 'server/mcp-sdk.mjs'));
   await assert.rejects(buildRelease({ root }));
+});
+
+
+test('the Codex catalog travels byte-identical with the runtime and a missing catalog refuses packaging', async t => {
+  const { root } = await fixture(t);
+  const built = await buildRelease({ root });
+  const files = entries(await readFile(built.archivePath));
+  const name = '.agents/plugins/marketplace.json';
+  const source = await readFile(join(root, name));
+  assert.deepEqual(files.get(prefix + name), source);
+  const catalog = JSON.parse(files.get(prefix + name));
+  const plugin = JSON.parse(files.get(prefix + '.codex-plugin/plugin.json'));
+  assert.ok(catalog.plugins.some(entry => entry.name === plugin.name && entry.source.path === './'));
+  const manifest = JSON.parse(files.get(prefix + 'RELEASE-MANIFEST.json'));
+  assert.equal(manifest.files[name].sha256, digest(source));
+  await rm(join(root, name));
+  await assert.rejects(buildRelease({ root }), { code: 'ENOENT', path: join(root, name) });
 });
