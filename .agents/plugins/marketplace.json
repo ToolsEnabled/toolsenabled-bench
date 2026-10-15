@@ -1,0 +1,20 @@
+{
+  "name": "toolsenabled-bench-openai",
+  "interface": {
+    "displayName": "ToolsEnabled Bench for Codex"
+  },
+  "plugins": [
+    {
+      "name": "toolsenabled-bench",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

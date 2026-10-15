@@ -201,3 +201,9 @@ The source includes an MCPB manifest and packaging tools for qualification; nati
 macOS/Windows Desktop acceptance is not yet established. ToolsEnabled is not affiliated with or endorsed by Anthropic.
 
 [Support](mailto:support@toolsenabled.ai) · [Privacy and retention](PRIVACY.md) · [Security and reporting](SECURITY.md).
+
+## Codex plugin candidate (unreleased)
+
+See [Codex marketplace setup](docs/CODEX.md) for branch installation, supported scope,
+external data and current qualification limits. This self-distribution candidate
+is separate from OpenAI public-directory review.

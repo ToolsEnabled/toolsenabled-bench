@@ -15,7 +15,7 @@ const TOP_LEVEL = [
   'package.json', 'release-config.json', 'plugins.json', 'index.html',
   'README.md', 'SECURITY.md', 'PRIVACY.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
   'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md',
-  '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.mcp.json', 'manifest.json',
+  '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', '.mcp.json', 'manifest.json',
   'skills/toolsenabled-bench/SKILL.md',
 ];
 const TOOL_FILES = [

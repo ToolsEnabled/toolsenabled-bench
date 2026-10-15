@@ -28,7 +28,9 @@
     "longDescription": "Author local benchmark studies, freeze their exact runtime, execute authorized recorded controls and inspect retained evidence.",
     "defaultPrompt": [
       "Read my Bench projects and help me inspect a frozen study."
-    ]
+    ],
+    "privacyPolicyURL": "https://github.com/ToolsEnabled/toolsenabled-bench/blob/openai-plugin/PRIVACY.md",
+    "termsOfServiceURL": "https://toolsenabled.ai/terms/"
   },
   "mcpServers": {
     "bench": {
@@ -41,5 +43,6 @@
         "BENCHMARK_DATA_DIR"
       ]
     }
-  }
+  },
+  "hooks": []
 }
