@@ -159,17 +159,17 @@ Development requires Node.js 22.19 or later, npm and Python 3 for interpreter re
 ```sh
 npm ci
 npm run build
+npx playwright install chromium
 npm test
 npm run check:core
 npm run serve
 ```
 
-Browser acceptance additionally requires a supported Playwright Chromium installation:
-
-```sh
-npx playwright install chromium
-npm run test:browser
-```
+The full Node suite includes Playwright browser cases and uses four test
+processes. Install Chromium before `npm test`. On Linux hosts missing browser
+system libraries, `npx playwright install --with-deps chromium` also installs
+them; CI performs that step before tests. The additional end-to-end browser
+review is `npm run test:browser`.
 
 The runtime ZIP omits development tests and fixtures. `npm run release` builds the application and creates a ZIP and checksum under `release/`. Packaging uses sorted paths and fixed metadata; reproducibility requires identical packaged inputs and the recorded toolchain.
 

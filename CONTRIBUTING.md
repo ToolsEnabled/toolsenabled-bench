@@ -5,11 +5,12 @@ Use Node.js 22.19 or later, npm, and Python 3 for development tests. In the full
 ```sh
 npm ci
 npm run build
+npx playwright install chromium
 npm test
 npm run check:core
 ```
 
-The inherited UI regression suites use a DOM stand-in and may take several minutes. Browser acceptance uses `npm run test:browser` after installing Playwright Chromium. Check [docs/REVIEW.md](docs/REVIEW.md) for the current browser result and launch configuration. The prebuilt runtime ZIP omits development tests and fixtures.
+Some inherited UI suites use a DOM stand-in; the full Node suite also includes Playwright cases, so install Chromium before `npm test`. The default test concurrency is four processes. On Linux, `npx playwright install --with-deps chromium` can provide missing system libraries. Additional browser acceptance uses `npm run test:browser`. Check [docs/REVIEW.md](docs/REVIEW.md) for the current browser result and launch configuration. The prebuilt runtime ZIP omits development tests and fixtures.
 
 Keep compiler, runtime and reporting code shared between browser and CLI. Treat draft editing, freezing, collection and read-only archive inspection as distinct operations. Imported evidence must bind to its original project. Preserve pending fields and the single replacement Undo across saves and reloads. Refuse conflicting revisions, keep edits after failed reads or writes, and prevent delayed save responses from clearing newer edits.
 

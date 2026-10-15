@@ -44,6 +44,7 @@ Reproduce source checks with Node.js 22.19 or later, npm and Python 3 for interp
 ```sh
 npm ci
 npm run build
+npx playwright install chromium
 npm test
 npm run check:core
 ```

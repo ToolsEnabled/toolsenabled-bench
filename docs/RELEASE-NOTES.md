@@ -18,6 +18,9 @@ acceptance remain unverified; no directory listing is claimed.
   or damaged. A visible warning retains that record for inspection.
 - Updated the exactly pinned MCP SDK to 1.32.1. Its OAuth-client advisory excludes
   this stdio server; the update removes the affected dependency version.
+- Source setup and CI install Playwright Chromium before the full suite, which
+  already contains browser cases. The suite uses four test processes; assertions
+  and timeouts are unchanged.
 - First-install documentation now separates Linux Bash/macOS zsh or Bash from
   Windows PowerShell, with archive hashing, extraction, explicit external data
   storage and verification before startup. Native macOS/Windows and Claude

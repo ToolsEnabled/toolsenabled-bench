@@ -12,7 +12,7 @@
     "build": "node tools/build.mjs",
     "start": "node tools/build.mjs && node server/main.mjs",
     "serve": "node server/main.mjs",
-    "test": "node --test tools/test/*.test.mjs test/*.test.mjs",
+    "test": "node --test --test-concurrency=4 tools/test/*.test.mjs test/*.test.mjs",
     "check:core": "node tools/check-benchmark-core-independent.mjs",
     "test:browser": "node tools/browser-review.mjs && node --test test/web-run-list-warning.browser.mjs",
     "test:standalone": "node --test test/*.test.mjs",
