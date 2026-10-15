@@ -1,6 +1,6 @@
 # Research Benchmark Template 2.2.0 — identity and portable-study contract
 
-This document describes the template shipped by ToolsEnabled Bench 0.2.0 beta. The recorded generator remains **ToolsEnabled BenchMark Builder 0.2.0**. The pinned source validators are the authority for complete field definitions and limits; historical studies keep their original runtime and citation identities. Release sidecars identify the exact source snapshot and its qualification results.
+This document describes the template shipped by ToolsEnabled Bench 0.3.3 beta. The recorded generator remains **ToolsEnabled BenchMark Builder 0.3.3**. The pinned source validators are the authority for complete field definitions and limits; historical studies keep their original runtime and citation identities. Release sidecars identify the exact source snapshot and its qualification results.
 
 ## Identity and versioning
 
@@ -10,7 +10,7 @@ This document describes the template shipped by ToolsEnabled Bench 0.2.0 beta. T
 | Template title | ToolsEnabled BenchMark Builder Research Template | `TEMPLATE.title` |
 | Template version | `2.2.0` | `TEMPLATE.version` |
 | New study schema | `4` | `STUDY_VERSION` in `src/benchmark/study-schema.mjs` |
-| Recorded generator | ToolsEnabled BenchMark Builder `0.2.0` | `GENERATOR` and `TEMPLATE.generator` |
+| Recorded generator | ToolsEnabled BenchMark Builder `0.3.3` | `GENERATOR` and `TEMPLATE.generator` |
 | License | MIT | `TEMPLATE.license` and root `LICENSE` |
 | Template author | Joshua Pinckard | `TEMPLATE.author` |
 

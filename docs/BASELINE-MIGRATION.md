@@ -2,7 +2,7 @@
 
 ## Current recorded identities
 
-ToolsEnabled Bench is the public product name. Newly frozen studies retain the software identity **ToolsEnabled BenchMark Builder 0.2.0**, research template **2.2.0** and study schema **4**. The investigator's study version and authorship are separate fields.
+ToolsEnabled Bench is the public product name. Newly frozen studies retain the software identity **ToolsEnabled BenchMark Builder 0.3.3**, research template **2.2.0** and study schema **4**. The investigator's study version and authorship are separate fields.
 
 Schema 4 pins the core plus configured runtime plugins. Source extraction and these identity changes affect runtime hashes, newly frozen project hashes, source-bound reviews, citations and report metadata. They do not authorize changing the meaning of an earlier frozen study.
 

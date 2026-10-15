@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { startServer } from '../server/main.mjs';
 
 test('Local runs shows healthy evidence and visible warnings without actions on broken rows', { timeout: 40000 }, async t => {
-  const base = resolve(process.env.BENCH_OUTPUT_TEST_ROOT || '.release-work/tmp'); await mkdir(base, { recursive: true });
+  const base = resolve(process.env.BENCH_OUTPUT_TEST_ROOT || join(tmpdir(), 'bench-run-list-tests')); await mkdir(base, { recursive: true });
   const dataDir = await mkdtemp(join(base, 'web-run-list-')), app = await startServer({ port: 0, dataDir });
   const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--no-zygote', '--disable-dev-shm-usage'] });
   t.after(async () => { await browser.close(); await app.close(); if (!process.env.BENCH_OUTPUT_TEST_ROOT) await rm(dataDir, { recursive: true, force: true }); });

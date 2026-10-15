@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { startServer } from '../server/main.mjs';
 
 async function runListFixture(base) {
@@ -18,7 +19,7 @@ async function runListFixture(base) {
   return { app, dataDir, ids, healthy };
 }
 test('good run coexists with missing, invalid JSON and malformed records and explicit warnings', async t => {
-  const f = await runListFixture(resolve(process.env.BENCH_OUTPUT_TEST_ROOT || '.release-work/tmp'));
+  const f = await runListFixture(resolve(process.env.BENCH_OUTPUT_TEST_ROOT || join(tmpdir(), 'bench-run-list-tests')));
   t.after(async () => { await f.app.close(); if (!process.env.BENCH_OUTPUT_TEST_ROOT) await rm(f.dataDir, { recursive: true, force: true }); });
   const warnings = [], rows = await f.app.runs.list({ onWarning: message => warnings.push(message) });
   assert.equal(Array.isArray(rows), true); assert.equal(rows.length, 4);
@@ -39,7 +40,7 @@ test('good run coexists with missing, invalid JSON and malformed records and exp
 });
 
 test('malformed history and identity fields remain warning rows and cannot break valid runs', async t => {
-  const f = await runListFixture(resolve(process.env.BENCH_OUTPUT_TEST_ROOT || '.release-work/tmp'));
+  const f = await runListFixture(resolve(process.env.BENCH_OUTPUT_TEST_ROOT || join(tmpdir(), 'bench-run-list-tests')));
   t.after(async () => { await f.app.close(); if (!process.env.BENCH_OUTPUT_TEST_ROOT) await rm(f.dataDir, { recursive: true, force: true }); });
   for (const changes of [{ history: "not an array" }, { history: [null] }, { projectSha256: 42 }, { files: null }, { id: f.ids[1] },
     { history: [{ command: { toString: null } }] }, { history: [{ command: 'run', code: {} }] },

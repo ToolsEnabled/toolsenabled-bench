@@ -34,6 +34,13 @@ acceptance remain unverified; no directory listing is claimed.
   examples need no live model connection; study execution remains an explicit
   action with its own declared apparatus and possible external costs.
 
+New freezes record generator 0.3.3 and the repaired runtime. Current export
+baselines were regenerated for those deliberate identity and source-hash
+changes and the revised pinned-input instructions. Comparing the 0.3.2 and
+0.3.3 generic/Lean study shapes after excluding derived digests found only the
+new generator version; tasks, prompts, expected answers, conditions, schedules
+and analysis plans are unchanged. Original frozen studies keep their own bytes.
+
 Archive filenames keep the historical `toolsenabled-benchmark-builder` prefix.
 Existing frozen generator records retain their original title. New freezes use the installed package version;
 historical studies and research template 2.2.0 retain their recorded identities.
