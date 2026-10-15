@@ -18,7 +18,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "ToolsEnabled Bench",
-    "shortDescription": "Compose and inspect reproducible studies",
+    "shortDescription": "Inspect reproducible studies",
     "developerName": "ToolsEnabled, Inc.",
     "category": "Productivity",
     "capabilities": [
@@ -30,7 +30,8 @@
       "Read my Bench projects and help me inspect a frozen study."
     ],
     "privacyPolicyURL": "https://github.com/ToolsEnabled/toolsenabled-bench/blob/openai-plugin/PRIVACY.md",
-    "termsOfServiceURL": "https://toolsenabled.ai/terms/"
+    "websiteURL": "https://github.com/ToolsEnabled/toolsenabled-bench",
+    "supportURL": "https://github.com/ToolsEnabled/toolsenabled-bench/issues"
   },
   "mcpServers": {
     "bench": {

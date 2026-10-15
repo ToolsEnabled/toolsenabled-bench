@@ -34,6 +34,7 @@ backup/deletion. The stdio server has no telemetry or ToolsEnabled account.
 Declared collectors/plugins can use the user's filesystem/network authority and
 Codex can send tool results to its model provider. Review exact execution before
 allowing it. This package adds explicit empty hooks and preserves Claude wiring.
-See [Privacy](../PRIVACY.md), [Security](../SECURITY.md), MIT license and
-[Terms](https://toolsenabled.ai/terms/). The terms currently describe Fleet;
-all-product coverage and the separate public-directory gates remain pending.
+See [Privacy](../PRIVACY.md), [Security](../SECURITY.md) and the MIT license.
+No applicable Bench terms URL has been established; the live terms cover Fleet
+only. Codex metadata deliberately omits that link. Product terms and separate
+public-directory gates remain pending.
