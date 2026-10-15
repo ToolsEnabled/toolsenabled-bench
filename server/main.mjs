@@ -121,7 +121,12 @@ export async function startServer({
             }
           }
           if (path === "/api/runs") {
-            if (req.method === "GET") return send(await runs.list());
+            if (req.method === "GET") {
+              let warning;
+              const rows = await runs.list({ onWarning: message => { warning = message; } });
+              if (warning) res.setHeader("X-Benchmark-Run-Warning", warning);
+              return send(rows);
+            }
             if (req.method === "POST") {
               const input = await body(req);
               await projects.read(input.projectId);

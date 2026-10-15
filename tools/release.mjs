@@ -9,11 +9,11 @@ import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PRODUCT = 'ToolsEnabled BenchMark Builder';
+const PRODUCT = 'ToolsEnabled Bench';
 const MANIFEST = 'RELEASE-MANIFEST.json';
 const TOP_LEVEL = [
   'package.json', 'release-config.json', 'plugins.json', 'index.html',
-  'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
+  'README.md', 'SECURITY.md', 'PRIVACY.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md',
   'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md',
   '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.mcp.json', 'manifest.json',
   'skills/toolsenabled-bench/SKILL.md',
@@ -266,7 +266,10 @@ function releaseReadme(pkg) {
     `This is the standalone runtime distribution. Requires Node.js ${pkg.engines.node}.\n` +
     'The prebuilt application and exported-study runtime are included. No account or package installation is required to serve this archive.\n\n' +
     '## Run offline\n\n' +
-    'Extract the ZIP, open its directory, and run (replace the absolute data path):\n\n```sh\nnode tools/release.mjs --verify\nBENCHMARK_DATA_DIR=/absolute/private-bench-data node server/main.mjs\n```\n\n' +
+    `Extract the ZIP into a fresh installation folder, then open its toolsenabled-benchmark-builder-${pkg.version} directory. Check the archive checksum from a trusted release source before running its verifier. See README.md for extraction commands.\n\n` +
+    '### Linux / macOS: POSIX shell\n\n```sh\nnode tools/release.mjs --verify\nexport BENCHMARK_DATA_DIR="$HOME/ToolsEnabled/bench-data"\nnode server/main.mjs\n```\n\n' +
+    '### Windows: PowerShell\n\n```powershell\nnode tools/release.mjs --verify\nif ($LASTEXITCODE -ne 0) { throw \'Bench archive verification failed.\' }\n$env:BENCHMARK_DATA_DIR = Join-Path $env:LOCALAPPDATA \'ToolsEnabled/Bench/data\'\nnode server/main.mjs\n```\n\n' +
+    'Stop if verification fails. Use a private local data folder outside the installation; filesystem mode bits do not establish Windows ACL protection. Native macOS, Windows and Claude Desktop acceptance are not established by Linux checks; see the matching release verification evidence.\n\n' +
     'Open http://127.0.0.1:4318. The server binds only to 127.0.0.1. Projects and runs live in the chosen external directory; back it up. The plugin dashboard refuses paths overlapping the installation. `BENCHMARK_PORT` selects another local port.\n\n' +
     'The examples are authored recorded controls, with no live model-result claims. External collectors require their separately declared environment. Optional native Lean execution requires its Python/Docker apparatus; it is not needed for the recorded examples.\n\n' +
     '## MCP over stdio\n\n' +

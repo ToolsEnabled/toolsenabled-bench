@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Self-contained Node entry point. No ToolsEnabled packages or services.
-import { readFile, writeFile, mkdir, open, realpath, lstat, rm } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, open, realpath, lstat, rm, readdir, rename } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { resolve, dirname, parse as pathParts, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -356,6 +356,79 @@ export function createAdapter(root, children = new Set()) {
     })
   }
 }
+// Derived output is data publication, including when the project is untrusted.
+// Check every existing ancestor and retained output entry before any writes.
+// Recheck at publication and replace an exclusively created, nofollow temporary
+// file; never truncate an existing destination. These checks are not an OS
+// sandbox or a complete defense against concurrent processes of the same user.
+async function outputPath(path, directory = false) {
+  const full = resolve(path), anchor = pathParts(full).root
+  const parts = full.slice(anchor.length).split(sep).filter(Boolean)
+  let current = anchor, info
+  for (let index = 0; index < parts.length; index++) {
+    current = resolve(current, parts[index])
+    try { info = await lstat(current) }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error }
+    invariant(!info.isSymbolicLink(), `Output cannot use a symlink: ${current}.`)
+    const isDirectory = index < parts.length - 1 || directory
+    invariant(isDirectory ? info.isDirectory() : info.isFile(), `Output needs regular files and directories: ${current}.`)
+    if (!isDirectory) invariant(info.nlink === 1, `Output cannot replace a multiply linked file: ${current}.`)
+  }
+  return info
+}
+async function preflightOutput(output, entries = []) {
+  const visit = async directory => {
+    if (!await outputPath(directory, true)) return
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name)
+      if (entry.isDirectory()) await visit(path)
+      else await outputPath(path)
+    }
+  }
+  await visit(resolve(output))
+  for (const [name] of entries) {
+    invariant(safePath(name), `Invalid output path: ${name}.`)
+    await outputPath(resolve(output, name))
+  }
+}
+async function outputDirectory(directory) {
+  await outputPath(directory, true)
+  await mkdir(directory, { recursive: true })
+  await outputPath(directory, true)
+}
+async function publishOutput(output, entries) {
+  await preflightOutput(output, entries)
+  for (const [name, contents] of entries) {
+    const target = resolve(output, name)
+    await outputDirectory(dirname(target))
+    const temporary = resolve(dirname(target), '.bench-output-' + randomUUID() + '.tmp')
+    let handle, owned = false
+    try {
+      handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW || 0), 0o600)
+      owned = true
+      const info = await handle.stat()
+      invariant(info.isFile() && info.nlink === 1, 'Output temporary file is not exclusively owned.')
+      await handle.writeFile(contents); await handle.sync(); await handle.close(); handle = null
+      await outputPath(target)
+      await rename(temporary, target); owned = false
+    } finally {
+      await handle?.close()
+      if (owned) await rm(temporary)
+    }
+  }
+}
+async function outputJournal(output) {
+  const path = resolve(output, 'attempts.jsonl')
+  await outputPath(path)
+  const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | (constants.O_NOFOLLOW || 0), 0o600)
+  try {
+    const info = await handle.stat(), checked = await outputPath(path)
+    invariant(info.isFile() && info.nlink === 1 && checked?.dev === info.dev && checked?.ino === info.ino,
+      'Output journal changed while opening or is multiply linked.')
+    return handle
+  } catch (error) { await handle.close(); throw error }
+}
+
 async function journalAt(output) {
   try {
     const text = await readFile(resolve(output, 'attempts.jsonl'), 'utf8')
@@ -414,13 +487,14 @@ function nativeJson(value) {
   return text
 }
 async function publishNativeFiles(output, entries) {
+  await preflightOutput(output, entries)
   const owned = []
   try {
     for (const [name, contents] of entries) {
       // The retained journal establishes the output directory; never create
       // another directory or traverse a replacement symlink for publication.
       await nativePath(output, 'attempts.jsonl')
-      const path = resolve(output, name), handle = await open(path, 'wx', 0o600)
+      const path = resolve(output, name), handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW || 0), 0o600)
       const row = { path, handle, info: null }; owned.push(row); row.info = await handle.stat()
       await handle.writeFile(contents); await handle.sync(); await handle.close(); row.handle = null
     }
@@ -442,6 +516,7 @@ async function publishNativeFiles(output, entries) {
 
 export async function verifyNativeProjectEvidence(root, { output = resolve(root, 'results') } = {}) {
   root = resolve(root); output = resolve(output)
+  await preflightOutput(output)
   const budget = { bytes: 0 }
   const project = JSON.parse(nativeText(await nativeBytes(root, 'project.json', budget)))
   const journal = nativeText(await nativeBytes(output, 'attempts.jsonl', budget))
@@ -465,7 +540,8 @@ async function releaseOwnedLock(lock, owner) {
   await rm(lock, { recursive: true })
 }
 async function claim(output, recover, project) {
-  await mkdir(output, { recursive: true })
+  await preflightOutput(output)
+  await outputDirectory(output)
   const lock = resolve(output, '.run-lock'), gate = resolve(output, '.recovery-lock')
   const owner = canonical({ pid: process.pid, startedAt: new Date().toISOString(), token: randomUUID() })
   // Every claim takes this short exclusive gate. Two recoveries must never
@@ -541,11 +617,9 @@ async function projectManifest(root) {
 }
 async function writeAnalysis(output, project, events, root, receipts = null) {
   receipts ??= await retainedReceipts(output)
-  for (const [file, contents] of Object.entries(await researchReportFiles(project, events, { provenance: await projectProvenance(root), attributions: await projectAttributions(root), manifest: await projectManifest(root), qualification: receipts.qualification, nativeVerification: receipts.nativeVerification, runtimeIntegrity: await runningRuntimeDigests(project) }))) {
-    const target = resolve(output, file)
-    await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, contents)
-  }
+  const files = await researchReportFiles(project, events, { provenance: await projectProvenance(root), attributions: await projectAttributions(root), manifest: await projectManifest(root), qualification: receipts.qualification, nativeVerification: receipts.nativeVerification, runtimeIntegrity: await runningRuntimeDigests(project) })
+  files['evidence.json'] = await evidenceDocument(project, events, analyze(project, events), receipts)
+  await publishOutput(output, Object.entries(files))
 }
 export async function runProject(root, { output = resolve(root, 'results'), recover = false, signal = new AbortController().signal } = {}) {
   const { project, runtime } = await openProject(root)
@@ -564,7 +638,7 @@ export async function runProject(root, { output = resolve(root, 'results'), reco
       invariant(!retained, 'An interrupted attempt already has a retained system response. Inspect responses/ and reuse it after repairing the grader; recovery cannot redraw the answer.')
     }
     await auditCustomGrades(root, project, events, signal)
-    journal = await open(resolve(output, 'attempts.jsonl'), 'a')
+    journal = await outputJournal(output)
     const children = new Set()
     const pluginGrade = gradingKind(project.spec.protocol.grading.kind)?.benchmarkId
       ? await loadPluginHandler(project, 'grade') : null
@@ -584,19 +658,17 @@ export async function runProject(root, { output = resolve(root, 'results'), reco
         invariant(Number.isSafeInteger(preparationSeq) && preparationSeq > 0, 'Qualification needs its durable preparation sequence before execution.')
         const directory = resolve(output, 'preflight', preparationSeq + '-' + randomUUID())
         qualifying = (async () => {
-          await mkdir(directory, { recursive: true })
-          await writeFile(resolve(directory, 'started.json'), JSON.stringify({ projectSha256: current.sha256, preparationSeq, registrySha256: current.requirements.sha256,
-            runtimeSources: current.spec.runtimeSources, policy: selectedInputGate(current), startedAt: new Date().toISOString() }, null, 2) + '\n')
+          await publishOutput(directory, [['started.json', JSON.stringify({ projectSha256: current.sha256, preparationSeq, registrySha256: current.requirements.sha256,
+            runtimeSources: current.spec.runtimeSources, policy: selectedInputGate(current), startedAt: new Date().toISOString() }, null, 2) + '\n']])
           try {
             const record = await qualifyProject(root, current, { signal })
             signal.throwIfAborted(); await readProject(root)
-            await writeFile(resolve(directory, 'qualification.json'), JSON.stringify(record, null, 2) + '\n')
-            for (const [file, contents] of Object.entries(requirementReportFiles(record))) { await mkdir(dirname(resolve(directory, file)), { recursive: true }); await writeFile(resolve(directory, file), contents) }
+            await publishOutput(directory, Object.entries({ 'qualification.json': JSON.stringify(record, null, 2) + '\n', ...requirementReportFiles(record) }))
             signal.throwIfAborted(); return record
           } catch (error) {
-            await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ projectSha256: current.sha256, preparationSeq, error: error.message || String(error),
+            await publishOutput(directory, [['failure.json', JSON.stringify({ projectSha256: current.sha256, preparationSeq, error: error.message || String(error),
               cancelled: signal.aborted, ...(error.evidence ? { process: error.evidence } : {}),
-              ...(error.partialQualification ? { partialQualification: error.partialQualification } : {}) }, null, 2) + '\n')
+              ...(error.partialQualification ? { partialQualification: error.partialQualification } : {}) }, null, 2) + '\n']])
             throw error
           }
         })()
@@ -604,8 +676,10 @@ export async function runProject(root, { output = resolve(root, 'results'), reco
       },
       runtime: { node: process.version, platform: process.platform, architecture: process.arch, versions: process.versions },
       recordResponse: async response => {
-        await mkdir(resolve(output, 'responses'), { recursive: true })
-        const file = await open(resolve(output, 'responses', `${response.trialId}-${response.attempt}.json`), 'wx')
+        await outputDirectory(resolve(output, 'responses'))
+        const destination = resolve(output, 'responses', `${response.trialId}-${response.attempt}.json`)
+        await outputPath(destination)
+        const file = await open(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW || 0), 0o600)
         try { await file.write(canonical(response) + '\n'); await file.sync() } finally { await file.close() }
       },
       settle: async () => { await Promise.all([...children].map(child => new Promise(resolve => child.once('close', resolve)))); return true },
@@ -617,7 +691,6 @@ export async function runProject(root, { output = resolve(root, 'results'), reco
     await readProject(root) // Verify pinned inputs and source again after execution.
     const receipts = await retainedReceipts(output)
     await writeAnalysis(output, project, result.events, root, receipts)
-    await writeFile(resolve(output, 'evidence.json'), await evidenceDocument(project, result.events, result.summary, receipts))
     return result
   } catch (error) {
     keepLock = error.keepLock === true
@@ -648,6 +721,7 @@ export async function main(args = process.argv.slice(2)) {
   }
   const root = resolve(options.project || dirname(fileURLToPath(import.meta.url)))
   const output = resolve(options.output || resolve(root, 'results'))
+  if (['analyze', 'reference', 'regrade', 'qualify'].includes(command)) await preflightOutput(output)
   if (command === 'regrade') invariant(!options.recover && !options.python && !options.compact, 'regrade accepts only --project and --output.')
   if (command === 'verify-native') {
     invariant(!options.recover && !options.python && !options.compact, 'verify-native accepts only --project and --output; it cannot recover, execute or regrade.')
@@ -684,16 +758,15 @@ export async function main(args = process.argv.slice(2)) {
       if (project.requirements?.selectedInput) timer = setTimeout(() => controller.abort(new Error('Qualification exceeded its frozen selected-input time budget.')), project.requirements.selectedInput.timeoutMs)
       const record = await qualifyProject(root, project, { python: options.python, signal: controller.signal })
       controller.signal.throwIfAborted(); await readProject(root)
-      await mkdir(output, { recursive: true }); await writeFile(resolve(output, 'qualification.json'), JSON.stringify(record, null, 2) + '\n')
-      for (const [file, contents] of Object.entries(requirementReportFiles(record))) { await mkdir(dirname(resolve(output, file)), { recursive: true }); await writeFile(resolve(output, file), contents) }
+      await publishOutput(output, Object.entries({ 'qualification.json': JSON.stringify(record, null, 2) + '\n', ...requirementReportFiles(record) }))
       process.stdout.write(canonical(record) + '\n')
       if (record.requirements && (record.requirements.status !== 'qualified' || record.requirements.selectedInput && (record.requirements.selectedInput.registeredStatus !== 'qualified'
         || record.requirements.selectedInput.policy === 'require-composition' && record.requirements.selectedInput.compositionStatus !== 'qualified'))) process.exitCode = 1
     } catch (error) {
       if (error.partialQualification) {
-        const directory = resolve(output, 'qualification-failures', randomUUID()); await mkdir(directory, { recursive: true })
-        await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ error: error.message || String(error), cancelled: controller.signal.aborted,
-          partialQualification: error.partialQualification, ...(error.evidence ? { process: error.evidence } : {}) }, null, 2) + '\n')
+        const directory = resolve(output, 'qualification-failures', randomUUID())
+        await publishOutput(directory, [['failure.json', JSON.stringify({ error: error.message || String(error), cancelled: controller.signal.aborted,
+          partialQualification: error.partialQualification, ...(error.evidence ? { process: error.evidence } : {}) }, null, 2) + '\n']])
       }
       throw error
     } finally { clearTimeout(timer); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop) }
@@ -713,8 +786,7 @@ export async function main(args = process.argv.slice(2)) {
         invariant(project.spec.protocol.grading.kind === 'module', 'regrade requires a frozen custom module grader.')
         const receipt = await auditCustomGrades(root, project, events, controller.signal)
         controller.signal.throwIfAborted(); await readProject(root)
-        await mkdir(output, { recursive: true })
-        await writeFile(resolve(output, 'custom-grade-verification.json'), JSON.stringify(receipt, null, 2) + '\n')
+        await publishOutput(output, [['custom-grade-verification.json', JSON.stringify(receipt, null, 2) + '\n']])
         process.stdout.write(canonical(receipt) + '\n'); return
       }
       controller.signal.throwIfAborted()
@@ -727,7 +799,7 @@ export async function main(args = process.argv.slice(2)) {
           catch { files[item.key] = { encoding: 'base64', data: bytes.toString('base64') } }
         }
         const bundle = await sealAuditReference(project, events, files), file = resolve(output, 'reference-bundle.json')
-        await mkdir(output, { recursive: true }); await writeFile(file, canonical(bundle) + '\n')
+        await publishOutput(output, [['reference-bundle.json', canonical(bundle) + '\n']])
         const customGrading = analyze(project, events).customGrading
         process.stdout.write(canonical({ reference: file, sha256: bundle.sha256, projectSha256: project.sha256, ...(customGrading ? { customGrading } : {}) }) + '\n'); return
       }
@@ -737,7 +809,6 @@ export async function main(args = process.argv.slice(2)) {
         // run (verify-native) reaches the file the Research page imports.
         const receipts = await retainedReceipts(output)
         await writeAnalysis(output, project, events, root, receipts)
-        await writeFile(resolve(output, 'evidence.json'), await evidenceDocument(project, events, summary, receipts))
       }
       process.stdout.write(canonical(summary) + '\n'); return
     } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop) }

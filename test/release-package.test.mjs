@@ -10,6 +10,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const work = join(repo, '.release-work');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const prefix = 'toolsenabled-benchmark-builder-0.2.0/';
+const sdkPin = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')).devDependencies['@modelcontextprotocol/sdk'];
 
 async function fixture(t) {
   await mkdir(work, { recursive: true });
@@ -20,7 +21,7 @@ async function fixture(t) {
     await writeFile(join(root, name), value);
   };
   for (const name of [
-    'README.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md', 'release-config.json',
+    'README.md', 'SECURITY.md', 'PRIVACY.md', 'LICENSE', 'NOTICE', 'CITATION.cff', 'ATTRIBUTION.md', 'release-config.json',
     'THIRD-PARTY-LICENSES.md', 'EXTRACTION.json', 'CONTRIBUTING.md', 'index.html',
     'tools/build.mjs', 'tools/plugin-bundle.mjs', 'tools/check-benchmark-core-independent.mjs',
     'tools/release.mjs', 'tools/mcp-bundle.mjs', 'tools/mcp-sdk-entry.mjs', 'tools/mcp-config.mjs',
@@ -46,9 +47,9 @@ async function fixture(t) {
   };
   const writePluginMetadata = () => put('src/benchmark/plugins.mjs', '// benchmark-plugin-package: ' + JSON.stringify(pluginMetadata) + '\n');
   await writePluginMetadata();
-  await put('package.json', JSON.stringify({ name: '@toolsenabled/benchmark-builder', version: '0.2.0', engines: { node: '>=22.19.0' }, devDependencies: { '@modelcontextprotocol/sdk': '1.26.0' } }));
-  await put('package-lock.json', JSON.stringify({ version: '0.2.0', packages: { '': { version: '0.2.0', devDependencies: { '@modelcontextprotocol/sdk': '1.26.0' } }, 'node_modules/@modelcontextprotocol/sdk': { version: '1.26.0' } } }));
-  await put('server/mcp-sdk.json', JSON.stringify({ format: 'bench-mcp-sdk-bundle', version: 1, sdkVersion: '1.26.0', packages: [{ name: '@modelcontextprotocol/sdk', version: '1.26.0' }], sha256: digest(await readFile(join(root, 'server/mcp-sdk.mjs'))), entrySha256: digest(await readFile(join(root, 'tools/mcp-sdk-entry.mjs'))), licenseSha256: digest(await readFile(join(root, 'docs/MCP-LICENSES.md'))) }));
+  await put('package.json', JSON.stringify({ name: '@toolsenabled/benchmark-builder', version: '0.2.0', engines: { node: '>=22.19.0' }, devDependencies: { '@modelcontextprotocol/sdk': sdkPin } }));
+  await put('package-lock.json', JSON.stringify({ version: '0.2.0', packages: { '': { version: '0.2.0', devDependencies: { '@modelcontextprotocol/sdk': sdkPin } }, 'node_modules/@modelcontextprotocol/sdk': { version: sdkPin } } }));
+  await put('server/mcp-sdk.json', JSON.stringify({ format: 'bench-mcp-sdk-bundle', version: 1, sdkVersion: sdkPin, packages: [{ name: '@modelcontextprotocol/sdk', version: sdkPin }], sha256: digest(await readFile(join(root, 'server/mcp-sdk.mjs'))), entrySha256: digest(await readFile(join(root, 'tools/mcp-sdk-entry.mjs'))), licenseSha256: digest(await readFile(join(root, 'docs/MCP-LICENSES.md'))) }));
   return { root, put, pluginMetadata, writePluginMetadata };
 }
 
@@ -79,6 +80,84 @@ function entries(zip) {
   assert.equal(zip.readUInt16LE(offset + 10), files.size);
   return files;
 }
+
+for (const note of ['SECURITY.md', 'PRIVACY.md']) {
+  test(`runtime archive includes exact ${note} bytes and inventories their hash`, async t => {
+    const { root } = await fixture(t);
+    const built = await buildRelease({ root });
+    const files = entries(await readFile(built.archivePath));
+    const expected = await readFile(join(root, note));
+    assert.deepEqual(files.get(prefix + note), expected);
+    const manifest = JSON.parse(files.get(prefix + 'RELEASE-MANIFEST.json'));
+    assert.deepEqual(manifest.files[note], { sha256: digest(expected), bytes: expected.length });
+  });
+
+  test(`packaging refuses missing ${note} before creating release output`, async t => {
+    const { root } = await fixture(t);
+    await rm(join(root, note));
+    await assert.rejects(buildRelease({ root }), error => {
+      assert.equal(error.code, 'ENOENT');
+      assert.equal(error.path, join(root, note));
+      return true;
+    });
+    await assert.rejects(readdir(join(root, 'release')), { code: 'ENOENT' });
+  });
+
+  test(`runtime verification requires ${note} bytes and its manifest entry`, async t => {
+    const { root, put } = await fixture(t);
+    const built = await buildRelease({ root });
+    const files = entries(await readFile(built.archivePath));
+    for (const [name, contents] of files) await put('installed/' + name.slice(prefix.length), contents);
+    const installed = join(root, 'installed');
+    await verifyRelease(installed);
+    await rm(join(installed, note));
+    await assert.rejects(verifyRelease(installed), { code: 'ENOENT', path: join(installed, note) });
+    const manifest = JSON.parse(files.get(prefix + 'RELEASE-MANIFEST.json'));
+    delete manifest.files[note];
+    await put('installed/RELEASE-MANIFEST.json', JSON.stringify(manifest));
+    await assert.rejects(verifyRelease(installed), { message: `Required release file is not inventoried: ${note}` });
+  });
+}
+
+test('generated release help uses ToolsEnabled Bench and README shell-specific startup commands', async t => {
+  const { root } = await fixture(t);
+  const built = await buildRelease({ root });
+  const files = entries(await readFile(built.archivePath));
+  const help = files.get(prefix + 'RELEASE.md').toString();
+  assert.ok(help.startsWith('# ToolsEnabled Bench 0.2.0\n'));
+  const manifest = JSON.parse(files.get(prefix + 'RELEASE-MANIFEST.json'));
+  assert.deepEqual(manifest.product, { name: 'ToolsEnabled Bench', version: '0.2.0' });
+  assert.equal(manifest.format, 'toolsenabled-benchmark-builder-release');
+  assert.match(help, /toolsenabled-benchmark-builder-0\.2\.0 directory/);
+  const readme = await readFile(join(repo, 'README.md'), 'utf8');
+  for (const [language, command] of [
+    ['sh', 'export BENCHMARK_DATA_DIR="$HOME/ToolsEnabled/bench-data"'],
+    ['powershell', "$env:BENCHMARK_DATA_DIR = Join-Path $env:LOCALAPPDATA 'ToolsEnabled/Bench/data'"],
+  ]) {
+    assert.ok(readme.includes(command), 'README command: ' + command);
+    const block = help.match(new RegExp('```' + language + '\\n([\\s\\S]*?)```'))?.[1];
+    assert.ok(block?.includes(command), language + ' environment assignment');
+    assert.ok(block.includes('node tools/release.mjs --verify'));
+    assert.ok(block.includes('node server/main.mjs'));
+  }
+  assert.match(help, /if \(\$LASTEXITCODE -ne 0\) \{ throw/);
+});
+
+test('source, lock, installed SDK and generated bundle use an exact patched 1.x pin', async () => {
+  const version = /^1\.(\d+)\.(\d+)$/.exec(sdkPin);
+  assert.ok(version && Number(version[1]) >= 31, 'MCP SDK must be a patched exact 1.x release >=1.31.0');
+  const lock = JSON.parse(await readFile(join(repo, 'package-lock.json'), 'utf8'));
+  const installed = JSON.parse(await readFile(join(repo, 'node_modules/@modelcontextprotocol/sdk/package.json'), 'utf8'));
+  const bundle = JSON.parse(await readFile(join(repo, 'server/mcp-sdk.json'), 'utf8'));
+  assert.equal(lock.packages[''].devDependencies['@modelcontextprotocol/sdk'], sdkPin);
+  assert.equal(lock.packages['node_modules/@modelcontextprotocol/sdk'].version, sdkPin);
+  assert.equal(installed.version, sdkPin);
+  assert.equal(bundle.sdkVersion, sdkPin);
+  assert.ok(bundle.packages.some(row => row.name === '@modelcontextprotocol/sdk' && row.version === sdkPin));
+  for (const [key, name] of [['sha256', 'server/mcp-sdk.mjs'], ['entrySha256', 'tools/mcp-sdk-entry.mjs'], ['licenseSha256', 'docs/MCP-LICENSES.md']]) {
+    assert.equal(bundle[key], digest(await readFile(join(repo, name))), name);
+  }
+});
 
 test('runtime archive preserves binary files, is deterministic across mtimes, and excludes local/development files', async t => {
   const { root, put } = await fixture(t);
@@ -236,7 +315,7 @@ test('runtime has no install inputs and repacks identically without the developm
     assert.equal(pkg[field], undefined, field);
   assert.ok(![...files.keys()].some(name => /(?:package-lock|npm-shrinkwrap)\.json$/.test(name)));
   assert.ok(![...files.keys()].some(name => name.includes('/tools/mcpb-build/')));
-  assert.equal(pkg.benchRuntime.sdkVersion, '1.26.0');
+  assert.equal(pkg.benchRuntime.sdkVersion, sdkPin);
   assert.equal(pkg.benchRuntime.sourcePackageSha256, digest(sourcePackage));
   assert.equal(pkg.benchRuntime.sourceLockSha256, digest(sourceLock));
   const extracted = join(root, 'runtime');
@@ -257,10 +336,10 @@ test('packaging refuses missing or stale MCP SDK bundle bytes and floating pins'
   await assert.rejects(buildRelease({ root }), /MCP/);
   await put('server/mcp-sdk.mjs', source);
   const pkg = JSON.parse(await readFile(join(root, 'package.json')));
-  pkg.devDependencies['@modelcontextprotocol/sdk'] = '^1.26.0';
+  pkg.devDependencies['@modelcontextprotocol/sdk'] = '^' + sdkPin;
   await put('package.json', JSON.stringify(pkg));
   await assert.rejects(buildRelease({ root }), /MCP/);
-  pkg.devDependencies['@modelcontextprotocol/sdk'] = '1.26.0';
+  pkg.devDependencies['@modelcontextprotocol/sdk'] = sdkPin;
   await put('package.json', JSON.stringify(pkg));
   await rm(join(root, 'server/mcp-sdk.mjs'));
   await assert.rejects(buildRelease({ root }));

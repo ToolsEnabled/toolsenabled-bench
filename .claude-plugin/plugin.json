@@ -1,6 +1,6 @@
 {
   "name": "toolsenabled-bench",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "displayName": "ToolsEnabled Bench",
   "description": "Compose local benchmark studies, freeze their exact runtime and inspect retained evidence. Execution requires the declared study identity.",
   "author": {

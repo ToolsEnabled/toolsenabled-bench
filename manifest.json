@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "toolsenabled-bench",
   "display_name": "ToolsEnabled Bench",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Compose local benchmark studies, freeze their exact runtime and inspect retained evidence. Execution requires the declared study identity.",
   "author": {
     "name": "ToolsEnabled, Inc.",
@@ -18,7 +18,7 @@
   },
   "license": "MIT",
   "privacy_policies": [
-    "https://toolsenabled.ai/legal/privacy/"
+    "https://github.com/ToolsEnabled/toolsenabled-bench/blob/v0.3.3/PRIVACY.md"
   ],
   "server": {
     "type": "node",

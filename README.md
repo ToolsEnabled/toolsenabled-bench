@@ -1,8 +1,8 @@
 # ToolsEnabled Bench
 
-**Version 0.3.2 beta · MIT License**
+**Version 0.3.3 beta · MIT License**
 
-ToolsEnabled Bench is a standalone research workbench for composing benchmark tasks, freezing protocols, exporting runnable studies and regenerating reports from retained evidence. It stores projects locally and requires no ToolsEnabled account. It is a separate product from ToolsEnabled Fleet. The worked UI examples use authored recorded controls; they contain no live model measurements.
+ToolsEnabled Bench is a standalone research workbench for composing benchmark tasks, freezing protocols, exporting runnable studies and regenerating reports from retained evidence. It stores projects locally and requires no ToolsEnabled account. It is a separate product from **Engine Bench**, **Head Gasket Bench** and ToolsEnabled Fleet. Engine Bench and Head Gasket Bench have their own domain apparatus and releases; this repository is the generic benchmark builder. The worked UI examples use authored recorded controls; they contain no live model measurements.
 
 - Compose prompts from reusable typed snippets and nested structures.
 - Generate controlled task sets from declared choices, seeds and exclusions.
@@ -14,22 +14,102 @@ ToolsEnabled Bench is a standalone research workbench for composing benchmark ta
 
 **Launching a received study's `cli.mjs` executes its JavaScript and plugin imports before verification begins.** Self-contained hashes establish consistency; they do not authenticate the code performing the check. Use an already trusted Bench installation to inspect received studies. The commands below distinguish retained-evidence inspection from execution.
 
-## Run the prebuilt release
+## First install: prebuilt runtime
 
-Requires **Node.js 22.19 or later**. Extract `toolsenabled-benchmark-builder-0.3.2.zip`, open its directory and run:
+Requires **Node.js 22.19 or later** on PATH. Download the runtime ZIP named
+`toolsenabled-benchmark-builder-0.3.3.zip` and its matching `SHA256SUMS` from the
+[ToolsEnabled Bench releases](https://github.com/ToolsEnabled/toolsenabled-bench/releases).
+Choose the 0.3.3 beta entry; do not substitute Engine Bench assets.
+Compare the archive's SHA-256 with the reviewed release checksum before extraction.
+A checksum from the same untrusted source does not authenticate the publisher.
+
+The steps below assume the ZIP is in your Downloads folder and use a fresh
+installation directory. Do not unpack over an older installation. The data
+folder is separate so upgrades can reuse it. The ZIP has a top-level
+`toolsenabled-benchmark-builder-0.3.3` folder; enter that folder after extraction.
+
+### Linux: Bash / macOS: zsh or Bash
+
+Install Node.js first; extraction also needs `unzip`. These are POSIX shell
+commands, suitable for Linux Bash and macOS zsh/Bash:
 
 ```sh
-node tools/release.mjs --verify
-BENCHMARK_DATA_DIR=/absolute/private-bench-data node server/main.mjs
+node --version
+archive="$HOME/Downloads/toolsenabled-benchmark-builder-0.3.3.zip"
+install_dir="$HOME/ToolsEnabled/bench-0.3.3"
+# Linux: compare this digest with the matching SHA256SUMS entry.
+sha256sum "$archive"
+# macOS: use shasum -a 256 "$archive" instead of sha256sum.
 ```
 
-Open **http://127.0.0.1:4318**. The server binds only to `127.0.0.1`. Serving the prebuilt application and using its recorded examples requires no package installation or network connection. External collection requires the environment declared by that study.
+Check that Node is at least 22.19 and the digest matches `SHA256SUMS` before
+continuing in the same terminal. On macOS, use the indicated `shasum` command
+in place of the Linux hash command. Then extract and start:
 
-The archive includes `RELEASE.md` and a file hash inventory. Release sidecars `SOURCE-MANIFEST.json`, `SOURCE-PINS.json`, `VERIFICATION.json` and `SHA256SUMS` identify the exact source, recorded checks and archive bytes. These checks establish content integrity, not publisher authentication.
+```sh
+mkdir -p "$install_dir"
+unzip "$archive" -d "$install_dir"
+cd "$install_dir/toolsenabled-benchmark-builder-0.3.3"
+node tools/release.mjs --verify
+export BENCHMARK_DATA_DIR="$HOME/ToolsEnabled/bench-data"
+node server/main.mjs
+```
+
+Stop if extraction or `--verify` fails; run each step only after the preceding
+step succeeds.
+
+### Windows: PowerShell
+
+Use PowerShell, not Command Prompt or a POSIX shell. Install Node.js first and
+open a new PowerShell window so PATH includes it:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+node --version
+$archive = Join-Path $HOME 'Downloads/toolsenabled-benchmark-builder-0.3.3.zip'
+$installDir = Join-Path $HOME 'ToolsEnabled/bench-0.3.3'
+Get-FileHash -LiteralPath $archive -Algorithm SHA256
+```
+
+Check that Node is at least 22.19 and the digest matches `SHA256SUMS`. Then
+continue in the same window, using a fresh extraction destination:
+
+```powershell
+Expand-Archive -LiteralPath $archive -DestinationPath $installDir
+Set-Location -LiteralPath (Join-Path $installDir 'toolsenabled-benchmark-builder-0.3.3')
+node tools/release.mjs --verify
+if ($LASTEXITCODE -ne 0) { throw 'Bench archive verification failed.' }
+$env:BENCHMARK_DATA_DIR = Join-Path $env:LOCALAPPDATA 'ToolsEnabled/Bench/data'
+node server/main.mjs
+```
+
+Check Node's version and the digest before extraction. PowerShell environment
+assignment uses `$env:NAME = ...`; the POSIX `NAME=value node ...` form does not
+work there. Keep data on a private local disk; filesystem mode bits do not
+establish Windows ACL protection.
+
+### Open and check the dashboard
+
+Open **http://127.0.0.1:4318**, or the address printed by the server if you set
+`BENCHMARK_PORT`. The server binds only to `127.0.0.1`. Leave its terminal open;
+Ctrl+C stops it. Serving the prebuilt app and replaying its recorded examples
+needs no npm installation, ToolsEnabled account or external model connection.
+
+Linux is the environment for this release lane's automated checks. The macOS
+and Windows commands describe the intended Node runtime setup; **native macOS,
+native Windows and Claude Desktop acceptance are not established by Linux
+checks**. Optional native domain tools have additional requirements. See the
+matching `VERIFICATION.json` for exactly what was tested.
+
+The ZIP includes `RELEASE-MANIFEST.json` and a verifier. The release sidecars
+`SOURCE-MANIFEST.json`, `SOURCE-PINS.json`, `VERIFICATION.json` and `SHA256SUMS`
+record source/artifact identity and checks; read them with the matching archive.
+Running the bundled verifier already executes code from that archive, so first
+obtain it through a source you trust. Hash consistency is not publisher trust.
 
 ## MCP hosts
 
-Bench 0.3.2 also runs as a local stdio MCP server: `node server/mcp.mjs`.
+Bench 0.3.3 also runs as a local stdio MCP server: `node server/mcp.mjs`.
 The runtime ZIP includes its pinned SDK; no runtime install or network is needed.
 Set `BENCHMARK_DATA_DIR` to an absolute private folder outside the installation,
 then run `node tools/mcp-config.mjs --client codex` to print registration; `claude`,
@@ -39,7 +119,7 @@ requires explicit study-ID confirmation; foreign studies additionally require tr
 
 ## Local projects and evidence
 
-Set `BENCHMARK_DATA_DIR` to an absolute private folder outside the installation before starting the dashboard. Plugin launches refuse paths overlapping their installation. `BENCHMARK_PORT` chooses another local port. Back up the entire data directory.
+Set `BENCHMARK_DATA_DIR` to an absolute private folder outside the installation before starting the dashboard. Choose a local filesystem and one host/PID namespace for each data root; do not share an active root through network storage. Plugin launches refuse paths overlapping their installation. `BENCHMARK_PORT` chooses another local port. Back up the entire data directory.
 
 Drafts retain unfinished editor fields and one replacement Undo snapshot. Revision checks refuse conflicting saves. Each run retains its frozen package, process log and evidence separately from the editable draft.
 
@@ -74,14 +154,14 @@ The export carries its pinned runtime, required plugins, manifest, prompts, prot
 
 ## Build and test from source
 
-Development requires Node.js 22.19 or later, npm and Python 3 for interpreter regression tests:
+Development requires Node.js 22.19 or later, npm and Python 3 for interpreter regression tests. From the full source checkout (not the runtime ZIP), set `BENCHMARK_DATA_DIR` using your shell as above, then:
 
 ```sh
 npm ci
 npm run build
 npm test
 npm run check:core
-BENCHMARK_DATA_DIR=/absolute/private-bench-data npm run serve
+npm run serve
 ```
 
 Browser acceptance additionally requires a supported Playwright Chromium installation:
@@ -109,15 +189,15 @@ Copyright (c) 2026 Joshua Pinckard. Distributed under the [MIT License](LICENSE)
 
 Joshua Pinckard conceived the project, defined its objectives and requirements, directed the autonomous agent workflows, selected and evaluated outputs, and assumes responsibility for the research methodology and conclusions. AI agents generated substantial portions of the implementation and written drafts. See [ATTRIBUTION.md](ATTRIBUTION.md).
 
-The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). The 0.3.2 package and frozen generator retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.
+The source extraction is recorded in [EXTRACTION.json](EXTRACTION.json). Frozen generator records retain the identity **ToolsEnabled BenchMark Builder**, with research template 2.2.0; the public product name is **ToolsEnabled Bench**. Archive filenames retain the `toolsenabled-benchmark-builder` prefix. Cite the software using [CITATION.cff](CITATION.cff) and cite each study separately. Historical exports retain their original identities.
 
 ## Claude plugin
 
 The `toolsenabled-bench` plugin provides the Bench workflow skill and direct Node
 MCP launch with an absolute private data directory outside the plugin cache.
-See [Claude installation and packaging](docs/CLAUDE-INSTALL.md) for local-scope
-installation, persistent state, human dashboard access and release qualification.
-A Desktop bundle is provided for qualification; native macOS/Windows acceptance
-is not yet established. ToolsEnabled is not affiliated with or endorsed by Anthropic.
+See [Claude and Codex setup](docs/CLAUDE-INSTALL.md) for direct stdio registration,
+persistent state, human dashboard access and the optional plugin packaging limits.
+The source includes an MCPB manifest and packaging tools for qualification; native
+macOS/Windows Desktop acceptance is not yet established. ToolsEnabled is not affiliated with or endorsed by Anthropic.
 
-[Support](mailto:support@toolsenabled.ai) · [Privacy](https://toolsenabled.ai/legal/privacy/).
+[Support](mailto:support@toolsenabled.ai) · [Privacy and retention](PRIVACY.md) · [Security and reporting](SECURITY.md).

@@ -1,6 +1,6 @@
 {
   "name": "@toolsenabled/benchmark-builder",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "A standalone workbench for composing, freezing, running and reporting reproducible benchmark studies.",
   "type": "module",
@@ -14,13 +14,13 @@
     "serve": "node server/main.mjs",
     "test": "node --test tools/test/*.test.mjs test/*.test.mjs",
     "check:core": "node tools/check-benchmark-core-independent.mjs",
-    "test:browser": "node tools/browser-review.mjs",
+    "test:browser": "node tools/browser-review.mjs && node --test test/web-run-list-warning.browser.mjs",
     "test:standalone": "node --test test/*.test.mjs",
     "release": "npm run build && node tools/release.mjs",
     "mcp": "node server/mcp.mjs"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "1.26.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "esbuild": "0.25.12",
     "playwright": "1.63.0",
     "prettier": "3.5.3"

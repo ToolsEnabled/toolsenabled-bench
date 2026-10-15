@@ -1,6 +1,6 @@
 {
   "name": "toolsenabled-bench",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Compose, freeze and inspect local benchmark studies with a persistent external data directory.",
   "author": {
     "name": "ToolsEnabled, Inc.",

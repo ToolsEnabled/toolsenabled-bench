@@ -1,13 +1,34 @@
-# Bench as a local MCP server
+# ToolsEnabled Bench as a local MCP server
 
-Bench 0.3.2 exposes twelve tools through the official MCP SDK 1.26.0 over stdio.
+ToolsEnabled Bench 0.3.3 beta exposes twelve tools through the pinned official MCP SDK over stdio (see `server/mcp-sdk.json` for the built version).
 The runtime ZIP includes the bundled SDK and all bundled dependency licences.
 Node.js 22.19 or later is the only requirement for the recorded examples. There
 is no package installation at runtime, network listener, account or hosted server.
 
+This is the generic benchmark builder, separate from Engine Bench and Head
+Gasket Bench. First extract/verify the runtime as described in the
+[per-host install guide](../README.md#first-install-prebuilt-runtime). Source
+checkouts need `npm ci` and `npm run build` first; the generated SDK is not
+checked into source. Native macOS/Windows and Claude Desktop acceptance require
+separate qualification; printing configuration is not host acceptance.
+
+Linux Bash / macOS zsh or Bash, from the extracted runtime directory:
+
 ```sh
-BENCHMARK_DATA_DIR=/absolute/private-bench-data node server/mcp.mjs
+export BENCHMARK_DATA_DIR="$HOME/ToolsEnabled/bench-data"
+node tools/mcp-config.mjs --client codex
 ```
+
+Windows PowerShell, from that same runtime directory:
+
+```powershell
+$env:BENCHMARK_DATA_DIR = Join-Path $env:LOCALAPPDATA 'ToolsEnabled/Bench/data'
+node tools/mcp-config.mjs --client codex
+```
+
+The helper prints configuration; choose your actual client below. Your MCP host
+launches `node server/mcp.mjs`, not the browser server. Starting it manually
+waits for protocol input and is not a graphical application.
 
 An MCP host starts this process and exchanges newline-delimited JSON on stdin and
 stdout. Do not launch it as an HTTP server. Set `BENCHMARK_DATA_DIR` to an
@@ -24,9 +45,11 @@ a valid local receipt requires explicit trust.
 The helper prints a snippet with your current Node executable, installed Bench
 path and data directory. It never edits client configuration or starts a client.
 Generated shell commands are for POSIX shells on Linux/macOS and PowerShell on Windows.
-Before running the helper, set `BENCHMARK_DATA_DIR` in your shell: `export
-BENCHMARK_DATA_DIR=/absolute/private-bench-data` on POSIX, or
-`$env:BENCHMARK_DATA_DIR = "C:\private-bench-data"` in PowerShell.
+Set `BENCHMARK_DATA_DIR` in the current shell first, as above. Generated commands
+quote spaces for that operating system. Run them in the matching shell, inspect
+the emitted paths, and merge JSON/YAML entries into existing configuration rather
+than replacing the entire file. The helper prints a data-directory path, never
+provider credential values.
 
 ```sh
 node tools/mcp-config.mjs --client claude
@@ -35,6 +58,10 @@ node tools/mcp-config.mjs --client deepseek
 node tools/mcp-config.mjs --client cursor
 node tools/mcp-config.mjs --client claude-desktop
 ```
+
+The following manual examples use POSIX paths. On Windows, prefer the helper
+above for native Node paths and PowerShell quoting. In hand-written JSON use
+forward slashes or escape each backslash as `\\`.
 
 For the examples below, replace `/absolute/bench` and `/absolute/bench-data` with
 your installation and desired data directory, and use your Node executable if
@@ -133,7 +160,7 @@ A host can drive the whole offline example with these calls:
 
 The default study replays two authored arithmetic responses. It makes no model
 call and supplies no model-performance evidence. Scientific experiments retain
-Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations identify generator 0.3.2. Historical frozen
+Bench's existing qualification requirements; MCP does not relax them. New freezes and template citations use the installed package version (0.3.3 for this release). Historical frozen
 identities and the template version 2.2.0 are preserved.
 
 ## Execution, foreign studies and bounds
@@ -186,7 +213,7 @@ process, or set a different `BENCHMARK_DATA_DIR`. The lease covers readers too:
 another process cannot misclassify an active run as interrupted or resume it.
 Use a local filesystem and one host/PID namespace for each data root. Older Bench
 versions and direct low-level store scripts do not honor this lease; stop them
-before using 0.3.2. It is not a boundary against hostile same-user code.
+before using this release. It is not a boundary against hostile same-user code.
 
 Clean shutdown, SIGINT and SIGTERM retain ownership until admitted operations and
 owned runs settle, then remove the lease. MCP also does this when stdin closes.
@@ -218,9 +245,14 @@ From a source checkout, install the locked development dependencies and build:
 ```sh
 npm ci
 npm run build
-env -u DISPLAY npm test
+npm test
 node tools/release.mjs
 ```
+
+The commands above run in Bash/zsh or PowerShell. Linux headless runs can use
+`env -u DISPLAY npm test`; that prefix is POSIX-specific and is not a PowerShell
+command. Tests and native optional apparatus have additional prerequisites;
+these source commands do not certify every host.
 
 An offline npm cache can replace registry access with `npm ci --offline --cache
 /path/to/cache`. The generated SDK module includes only its Node stdio closure;
@@ -228,3 +260,18 @@ An offline npm cache can replace registry access with `npm ci --offline --cache
 contains its dependency licence texts. The release builder requires the matching
 exact SDK pin and bundle hashes. SDK source and browser source rebuilds need the
 lockfile dependencies; serving an extracted ZIP needs none.
+
+## Plugin installations and privacy
+
+The existing Claude/Codex plugin includes the workflow skill and guarded
+`server/mcp-plugin.mjs` launcher. It is an alternative to direct registration,
+not an additional server to register against the same root. See
+[plugin installation and packaging](CLAUDE-INSTALL.md) for required external
+state, reviewed artifacts and qualification limits. Cursor/DeepSeek/Desktop
+snippets are direct stdio configurations; they are not claims of native plugin
+or directory acceptance.
+
+An MCP host receives tool results and can pass them to its model provider or
+retain them in its history. Local storage does not imply that your agent's
+conversation stays local. Read [privacy and retention](../PRIVACY.md) and
+[security boundaries](../SECURITY.md).

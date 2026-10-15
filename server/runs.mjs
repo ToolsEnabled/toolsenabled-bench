@@ -49,6 +49,19 @@ export class RunStore {
     const record = JSON.parse(
       await readFile(join(this.directory(id), "run.json"), "utf8"),
     );
+    if (!record || record.id !== id || typeof record.name !== "string" ||
+        typeof record.status !== "string" || typeof record.createdAt !== "string" ||
+        !Number.isFinite(Date.parse(record.createdAt)) || !Array.isArray(record.history) ||
+        record.history.some(row => !row || typeof row !== "object" ||
+          (row.command !== undefined && typeof row.command !== "string") ||
+          (row.code != null && !Number.isSafeInteger(row.code))) ||
+        !Array.isArray(record.files) || record.files.some(file => typeof file !== "string") ||
+        ["projectSha256", "purpose", "message", "phase", "directory", "log", "warning"].some(key =>
+          record[key] !== undefined && typeof record[key] !== "string") ||
+        (record.summary != null && (typeof record.summary !== "object" || Array.isArray(record.summary) ||
+          ["completed", "failed", "scheduled"].some(key => record.summary[key] != null &&
+            (!Number.isSafeInteger(record.summary[key]) || record.summary[key] < 0)))))
+      throw new Error("Run record is malformed. Inspect its retained run.json before using it.");
     if (active.includes(record.status) && !this.pending.has(id)) {
       record.status = "interrupted";
       record.message =
@@ -56,12 +69,23 @@ export class RunStore {
     }
     return record;
   }
-  async list() {
-    return (
-      await Promise.all(
-        (await readdir(this.root)).filter(validId).map((id) => this.read(id)),
-      )
-    ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  async list({ onWarning = () => {} } = {}) {
+    const records = await Promise.all(
+      (await readdir(this.root)).filter(validId).map(async id => {
+        try { return await this.read(id); }
+        catch (error) {
+          const status = error.code === "ENOENT" ? "incomplete" : "unreadable";
+          return {
+            id, name: "Retained run " + id, status, createdAt: "", unavailable: true,
+            warning: "This run is " + status + ". Its run.json is missing, malformed or unreadable. Retained files have been preserved; inspect them before repairing the record.",
+            history: [], files: [],
+          };
+        }
+      }),
+    );
+    const unavailable = records.filter(record => record.unavailable).length;
+    if (unavailable) onWarning(`${unavailable} retained ${unavailable === 1 ? "run needs" : "runs need"} inspection. Missing, malformed or unreadable records are shown with warnings; their files are preserved.`);
+    return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   }
   persist(record) {
     const snapshot = structuredClone(record);

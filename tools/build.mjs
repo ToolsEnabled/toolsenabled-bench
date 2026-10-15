@@ -61,4 +61,4 @@ await build({
 });
 await copyFile("index.html", "dist/index.html");
 await copyFile("src/app/favicon.svg", "dist/favicon.svg");
-console.log("Built ToolsEnabled BenchMark Builder " + version);
+console.log("Built ToolsEnabled Bench " + version);

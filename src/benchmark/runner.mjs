@@ -503,7 +503,7 @@ export async function runStudy(project, { events = [], append = async () => {}, 
         // record before its parent ends; it must never write late stage events.
         const response = workflow ? await pending : await Promise.race([pending, aborted])
         controller.signal.throwIfAborted() // A late response cannot become a score.
-        if (observationEnabled || resourceStudy(project)) phase = 'extraction'
+        phase = 'extraction'
         const raw = await measuredPhase(meter, 'response-extraction', async () => {
           if (resourceStudy(project) && response !== undefined) {
             const text = canonical(response), encoded = new TextEncoder().encode(text), limit = project.experimentTemplate.limits.maxResponseBytes
@@ -548,7 +548,7 @@ export async function runStudy(project, { events = [], append = async () => {}, 
         result = { status: 'completed', response: raw, grade: JSON.parse(canonical(scored)) }
       } catch (error) {
         if (error?.keepLock) throw error
-        if (observationEnabled && phase === 'transport' && error?.code === 'RESPONSE_EXTRACTION') phase = 'extraction'
+        if (phase === 'transport' && error?.code === 'RESPONSE_EXTRACTION') phase = 'extraction'
         result = { status: signal.aborted ? 'cancelled' : 'failed', phase, reason: error?.message || String(error), ...(error?.evidence || responseEvidence ? { response: responseEvidence || error.evidence } : {}) }
       } finally {
         clearTimeout(timer); signal.removeEventListener('abort', stop)

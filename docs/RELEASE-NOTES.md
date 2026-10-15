@@ -1,3 +1,46 @@
+# ToolsEnabled Bench 0.3.3 beta
+
+ToolsEnabled Bench is the generic benchmark builder. It is a separate product
+from **Engine Bench**, **Head Gasket Bench** and ToolsEnabled Fleet.
+
+Artifact digests, exact source identity and completed release checks belong to
+the matching release sidecars. Native macOS, Windows and Claude Desktop
+acceptance remain unverified; no directory listing is claimed.
+
+- Trusted report and reference output refuses linked destinations and preserves
+  outside files. Retained inspection continues to use installed code.
+- Received-response extraction failures stop collection without redrawing an
+  answer, whether or not the optional observation plan is enabled. Actual
+  transport failures retain the frozen retry policy.
+- Runnable exports require every pinned input and verify attached bytes before
+  download; incomplete packages no longer report runnable success.
+- Local runs remain discoverable when a neighboring run directory is incomplete
+  or damaged. A visible warning retains that record for inspection.
+- Updated the exactly pinned MCP SDK to 1.32.1. Its OAuth-client advisory excludes
+  this stdio server; the update removes the affected dependency version.
+- First-install documentation now separates Linux Bash/macOS zsh or Bash from
+  Windows PowerShell, with archive hashing, extraction, explicit external data
+  storage and verification before startup. Native macOS/Windows and Claude
+  Desktop acceptance remain separately qualified; Linux checks do not prove them.
+- Added local [privacy and retention notes](../PRIVACY.md) covering project/run
+  storage, raw evidence, MCP-host disclosure, HTTP/command collectors, credential
+  forwarding and copies retained outside the data root.
+- Added [security policy and private reporting](../SECURITY.md), including the
+  current-user execution boundary, trusted-runtime inspection, limits of
+  confirmation/hashes/redaction and ToolsEnabled's good-faith safe harbor.
+- Refreshed direct MCP setup and clarified optional Claude/Codex plugin packaging.
+  The previously documented marketplace is unavailable; direct stdio registration
+  needs no marketplace. Recorded
+  examples need no live model connection; study execution remains an explicit
+  action with its own declared apparatus and possible external costs.
+
+Archive filenames keep the historical `toolsenabled-benchmark-builder` prefix.
+Existing frozen generator records retain their original title. New freezes use the installed package version;
+historical studies and research template 2.2.0 retain their recorded identities.
+The software remains [MIT licensed](../LICENSE); preserve its notices and bundled
+dependency licence texts. These documentation changes make no new scientific or
+native-platform qualification claim.
+
 # 0.3.2 — retained Inspect, draft validation and Claude packaging
 
 - The builder owns retained Inspect state. A failed second Inspect retires the first inspected snapshot even after view-only navigation, while preserving the user’s own freeze and run evidence.
@@ -57,7 +100,7 @@ Original 0.1.0 exports retain their own runtime, hashes, citations and evidence.
 
 ## Run locally
 
-For the current 0.3.2 package, use Node.js 22.19 or later, extract `toolsenabled-benchmark-builder-0.3.2.zip` and run:
+For the historical 0.3.2 package, use Node.js 22.19 or later, extract `toolsenabled-benchmark-builder-0.3.2.zip` and run:
 
 ```sh
 node tools/release.mjs --verify
